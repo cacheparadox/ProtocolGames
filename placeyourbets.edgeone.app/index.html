@@ -306,7 +306,7 @@
 
             // --- 2. HI-LO PROTOCOL ---
             function launchHilo(c) {
-                let st = { a: false, b: 10, m: 0, cur: null, hist: [], streak: 0 };
+                let st = { a: false, b: 10, m: 0, cur: null, hist: [], streak: 0, t: null };
                 const suits=['♠','♥','♦','♣'], vals=['A','2','3','4','5','6','7','8','9','10','J','Q','K']; // Ace is 1
                 const valMap={'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13};
                 const buildDeck = () => { let d=[]; suits.forEach(s=>vals.forEach(v=>d.push({v,s}))); return d.sort(()=>Math.random()-0.5); };
@@ -332,8 +332,12 @@
                                     <div id="h-val" class="orbitron text-5xl text-yellow-500">${st.m.toFixed(2)}x</div>
                                 </div>
                                 <div id="h-ctrl">
-                                    <input type="number" id="h-in" value="${st.b}" class="w-full bg-black border border-white/10 p-4 rounded-xl text-yellow-500 text-center text-xl font-bold mb-4 outline-none">
-                                    <button onclick="window.hS()" class="w-full btn-gold py-5">DEAL START</button>
+                                    ${st.a ? 
+                                    `<div class="grid grid-cols-2 gap-4 mb-4"><button onclick="window.hGu(true)" class="bg-emerald-600 hover:bg-emerald-500 py-5 rounded-xl font-black text-white uppercase transition-colors">Higher</button><button onclick="window.hGu(false)" class="bg-rose-600 hover:bg-rose-500 py-5 rounded-xl font-black text-white uppercase transition-colors">Lower</button></div><button onclick="window.hC()" class="w-full bg-white/10 hover:bg-white/20 py-4 rounded-xl font-bold uppercase text-white transition-colors">Cash Out</button>`
+                                    : 
+                                    `<input type="number" id="h-in" value="${st.b}" class="w-full bg-black border border-white/10 p-4 rounded-xl text-yellow-500 text-center text-xl font-bold mb-4 outline-none">
+                                    <button onclick="window.hS()" class="w-full btn-gold py-5">PLACE BET</button>`
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -348,18 +352,12 @@
                 };
 
                 window.hS=()=>{ 
+                    if(st.t) clearTimeout(st.t);
                     st.b=parseFloat(document.getElementById('h-in').value); if(balance<st.b) return window.showToast("INSUFFICIENT FUNDS"); 
                     window.updateBalance(-st.b); st.a=true; st.m=0.00; st.streak=0; st.hist=[]; 
                     if(window.hiloDeck.length < 10) window.hiloDeck = buildDeck();
                     st.cur=window.hiloDeck.pop(); 
-                    hUI(); 
-                };
-
-                const hUI = () => { 
-                    render();
-                    if(st.a) {
-                        document.getElementById('h-ctrl').innerHTML=`<div class="grid grid-cols-2 gap-4 mb-4"><button onclick="window.hGu(true)" class="bg-emerald-600 hover:bg-emerald-500 py-5 rounded-xl font-black text-white uppercase transition-colors">Higher</button><button onclick="window.hGu(false)" class="bg-rose-600 hover:bg-rose-500 py-5 rounded-xl font-black text-white uppercase transition-colors">Lower</button></div><button onclick="window.hC()" class="w-full bg-white/10 hover:bg-white/20 py-4 rounded-xl font-bold uppercase text-white transition-colors">Cash Out</button>`;
-                    }
+                    render(); 
                 };
 
                 window.hGu=(hi)=>{ 
@@ -380,7 +378,7 @@
                         else if (st.streak === 5) st.m = 1.0;
                         else st.m = 1.0 + Math.pow(1.5, st.streak - 5) * 0.5;
                         
-                        st.hist.unshift(st.cur); st.cur=n; hUI(); window.showToast("CORRECT");
+                        st.hist.unshift(st.cur); st.cur=n; render(); window.showToast("CORRECT");
                     } else {
                         st.a=false; st.hist.unshift(st.cur);
                         showLoss(n); window.showToast("WRONG.");
@@ -395,7 +393,8 @@
                     lossEl.innerHTML = `<span>${bustingCard.v}</span><span class="text-5xl self-center">${bustingCard.s}</span><span class="self-end rotate-180">${bustingCard.v}</span>`;
                     lossEl.className = `casino-card ${isR?'red-card':''}`;
                     lossEl.classList.remove('hidden');
-                    setTimeout(()=>render(), 3500);
+                    if(st.t) clearTimeout(st.t);
+                    st.t = setTimeout(()=>{ st.cur=null; render(); }, 3500);
                 }
                 render();
             }
@@ -681,12 +680,24 @@
                     document.getElementById('c-btn').innerHTML=`<button onclick="window.cEj()" id="ce-btn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black py-6 rounded-xl uppercase transition-colors text-xl">Eject</button>`;
                     
                     const r = Math.random();
-                    const bust = r < 0.05 ? 1.00 : (1.00 / (1.00 - r)); 
+                    const isInstantBust = r < 0.05;
+                    const bust = isInstantBust ? 0.00 : (1.00 / (1.00 - r)); 
                     let t = 0;
                     
                     const can = document.getElementById('c-graph'); const ctx = can.getContext('2d');
                     ctx.strokeStyle = 'rgba(234, 179, 8, 0.5)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
                     ctx.beginPath(); ctx.moveTo(0, 320);
+
+                    if (isInstantBust) {
+                        st.m = 0.00;
+                        st.a = false;
+                        const mEl=document.getElementById('c-m'); 
+                        if(mEl){mEl.innerText='BUST 0.00x'; mEl.style.color='#e11d48';} 
+                        window.showToast("SYSTEM BUST"); 
+                        st.hist.unshift(st.m); if(st.hist.length>8) st.hist.pop();
+                        setTimeout(render, 3000); 
+                        return;
+                    }
 
                     let it=setInterval(()=>{ 
                         t += 0.05;

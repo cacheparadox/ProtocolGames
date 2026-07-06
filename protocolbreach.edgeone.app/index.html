@@ -106,12 +106,26 @@
         </div>
     </header>
 
-    <main class="flex-1 flex flex-col gap-4 p-3 sm:p-5 max-w-lg mx-auto w-full z-10">
-
-        <!-- Instructions -->
-        <div class="panel p-3 text-[10px] text-slate-500 leading-relaxed">
-            <span class="text-emerald-400 font-bold">HOW TO PLAY:</span> Guess the secret 8-bit password. Green pip = correct bit in correct position. Dark pip = wrong. You have 6 attempts.
+    <!-- Intro Modal -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-emerald-500 mx-4 shadow-2xl shadow-emerald-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black mb-2 text-emerald-400">PROTOCOL BREACH</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>Breach the subnet by guessing the 5-character Hexadecimal sequence (0-9, A-F).</p>
+                <div class="bg-black p-4 border border-slate-800 rounded">
+                    <ul class="list-disc pl-4 space-y-2 text-slate-300">
+                        <li>Enter a 5-hex-character guess and UPLOAD.</li>
+                        <li><span class="text-emerald-400 font-bold">Green Pip</span> = Exact match (right hex, right spot).</li>
+                        <li><span class="text-amber-400 font-bold">Yellow Pip</span> = Partial match (right hex, wrong spot).</li>
+                        <li>You have 8 attempts to find the sequence.</li>
+                    </ul>
+                </div>
+            </div>
+            <button onclick="window.startGame()" class="w-full text-black font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base bg-emerald-500 hover:bg-emerald-400">INITIATE BREACH</button>
         </div>
+    </div>
+
+    <main class="flex-1 flex flex-col gap-4 p-3 sm:p-5 max-w-lg mx-auto w-full z-10">
 
         <!-- History -->
         <div class="panel p-4 flex-1 flex flex-col gap-2 min-h-[240px]">
@@ -120,14 +134,15 @@
         </div>
 
         <!-- Current input -->
-        <div class="panel p-4">
+        <div class="panel p-4 mt-auto">
             <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-3">// CURRENT GUESS</div>
-            <div class="flex gap-2 justify-center mb-4" id="bit-row">
-                <!-- 8 bits rendered by JS -->
-            </div>
+            <div class="flex gap-2 justify-center mb-4" id="bit-row"></div>
+            
+            <div class="grid grid-cols-8 gap-1.5 mb-4" id="hex-pad"></div>
+
             <div class="flex justify-between items-center">
                 <button onclick="randomize()" class="text-[10px] text-slate-500 hover:text-white border border-slate-700 px-3 py-2 rounded orbitron transition-colors">RANDOM</button>
-                <button class="submit-btn" onclick="submitGuess()">UPLOAD_</button>
+                <button class="submit-btn" onclick="submitGuess()" id="btn-submit">UPLOAD_</button>
                 <button onclick="clearGuess()" class="text-[10px] text-slate-400 hover:text-red-400 border border-slate-700 px-3 py-2 rounded orbitron transition-colors">CLEAR</button>
             </div>
         </div>
@@ -152,15 +167,34 @@
     </div>
 
 <script>
-const MAX_ATTEMPTS = 6;
-const BITS = 8;
+const MAX_ATTEMPTS = 8;
+const BITS = 5;
+const HEX_CHARS = "0123456789ABCDEF".split('');
 let target = [];
 let guess = [];
 let attempts = 0;
 let gameOver = false;
 
 function genTarget() {
-    target = Array.from({length: BITS}, () => Math.random() < 0.5 ? 0 : 1);
+    target = Array.from({length: BITS}, () => HEX_CHARS[Math.floor(Math.random() * 16)]);
+}
+
+function renderHexPad() {
+    const pad = document.getElementById('hex-pad');
+    pad.innerHTML = '';
+    HEX_CHARS.forEach(char => {
+        const btn = document.createElement('button');
+        btn.className = 'bg-[#050d05] border border-[#1a2e1a] text-[#1e3a1e] hover:bg-[#1a2e1a] hover:text-emerald-400 font-black py-2 rounded orbitron text-xs transition-colors';
+        btn.textContent = char;
+        btn.onclick = () => typeHex(char);
+        pad.appendChild(btn);
+    });
+}
+
+function typeHex(char) {
+    if (gameOver || guess.length >= BITS) return;
+    guess.push(char);
+    renderBitRow();
 }
 
 function renderBitRow() {
@@ -168,27 +202,22 @@ function renderBitRow() {
     row.innerHTML = '';
     for (let i = 0; i < BITS; i++) {
         const btn = document.createElement('div');
-        btn.className = `bit-btn bit-${guess[i]}`;
-        btn.textContent = guess[i];
-        btn.dataset.idx = i;
-        btn.onclick = () => toggleBit(i);
+        const val = guess[i];
+        btn.className = 'bit-btn ' + (val !== undefined ? 'bit-1' : 'bit-0 text-slate-800 border-slate-800');
+        btn.textContent = val !== undefined ? val : '-';
+        if (val !== undefined) btn.onclick = () => { guess.splice(i, 1); renderBitRow(); };
         row.appendChild(btn);
     }
-}
-
-function toggleBit(i) {
-    if (gameOver) return;
-    guess[i] = 1 - guess[i];
-    renderBitRow();
+    document.getElementById('btn-submit').disabled = guess.length !== BITS;
 }
 
 function clearGuess() {
-    guess = Array(BITS).fill(0);
+    guess = [];
     renderBitRow();
 }
 
 function randomize() {
-    guess = Array.from({length: BITS}, () => Math.round(Math.random()));
+    guess = Array.from({length: BITS}, () => HEX_CHARS[Math.floor(Math.random() * 16)]);
     renderBitRow();
 }
 
@@ -203,18 +232,41 @@ function renderAttemptPips() {
 }
 
 function submitGuess() {
-    if (gameOver) return;
-    const correct = guess.filter((b, i) => b === target[i]).length;
-    const wrong = BITS - correct;
-    addHistoryRow(guess.slice(), correct);
+    if (gameOver || guess.length !== BITS) return;
+    
+    let exact = 0;
+    let partial = 0;
+    let tCopy = [...target];
+    let gCopy = [...guess];
+    
+    // Check exacts
+    for(let i=0; i<BITS; i++) {
+        if(gCopy[i] === tCopy[i]) {
+            exact++;
+            tCopy[i] = null;
+            gCopy[i] = null;
+        }
+    }
+    // Check partials
+    for(let i=0; i<BITS; i++) {
+        if(gCopy[i] !== null) {
+            const idx = tCopy.indexOf(gCopy[i]);
+            if(idx > -1) {
+                partial++;
+                tCopy[idx] = null;
+            }
+        }
+    }
+
+    addHistoryRow(guess.slice(), exact, partial);
     attempts++;
     renderAttemptPips();
 
-    if (correct === BITS) { endGame(true); return; }
+    if (exact === BITS) { endGame(true); return; }
     if (attempts >= MAX_ATTEMPTS) { endGame(false); return; }
 }
 
-function addHistoryRow(g, correct) {
+function addHistoryRow(g, exact, partial) {
     const list = document.getElementById('history-list');
     const row = document.createElement('div');
     row.className = 'hist-row';
@@ -225,29 +277,35 @@ function addHistoryRow(g, correct) {
     num.textContent = attempts + 1;
     row.appendChild(num);
 
-    // Bits
+    // Hex values
     for (let i = 0; i < BITS; i++) {
         const b = document.createElement('div');
-        const isCorrect = g[i] === target[i];
-        b.className = 'hist-bit ' + (isCorrect ? 'hb-correct' : 'hb-wrong');
+        const isExact = g[i] === target[i];
+        b.className = 'hist-bit ' + (isExact ? 'hb-correct' : 'hb-empty');
         b.textContent = g[i];
         row.appendChild(b);
     }
 
-    // Feedback
+    // Feedback (Exact = Green, Partial = Yellow)
     const fb = document.createElement('div');
     fb.className = 'feedback-bar ml-auto';
-    for (let i = 0; i < BITS; i++) {
+    for (let i = 0; i < exact; i++) {
         const pip = document.createElement('div');
-        pip.className = g[i] === target[i] ? 'fb-exact' : 'fb-none';
+        pip.className = 'fb-exact bg-emerald-500 shadow-[0_0_6px_#10b981]';
         fb.appendChild(pip);
     }
-    // Score label
-    const sc = document.createElement('div');
-    sc.className = 'text-[9px] orbitron font-black ml-1';
-    sc.style.color = correct === BITS ? '#10b981' : correct >= 5 ? '#f59e0b' : '#64748b';
-    sc.textContent = `${correct}/${BITS}`;
-    fb.appendChild(sc);
+    for (let i = 0; i < partial; i++) {
+        const pip = document.createElement('div');
+        pip.className = 'fb-exact bg-amber-500 shadow-[0_0_6px_#f59e0b]';
+        fb.appendChild(pip);
+    }
+    const emptyCount = BITS - exact - partial;
+    for (let i = 0; i < emptyCount; i++) {
+        const pip = document.createElement('div');
+        pip.className = 'fb-none';
+        fb.appendChild(pip);
+    }
+
     row.appendChild(fb);
 
     list.appendChild(row);
@@ -270,21 +328,24 @@ function endGame(win) {
 function newGame() {
     document.getElementById('result-modal').classList.add('hidden');
     document.getElementById('history-list').innerHTML = '';
-    attempts = 0;
     gameOver = false;
-    guess = Array(BITS).fill(0);
+    attempts = 0;
+    guess = [];
     genTarget();
     renderBitRow();
     renderAttemptPips();
+    renderHexPad();
 }
+
+window.startGame = function() {
+    document.getElementById('intro-modal').classList.add('hidden');
+    newGame();
+};
 
 window.newGame = newGame;
 window.submitGuess = submitGuess;
 window.clearGuess = clearGuess;
 window.randomize = randomize;
-
-// Boot
-newGame();
 </script>
 </body>
 </html>

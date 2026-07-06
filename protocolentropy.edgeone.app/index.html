@@ -113,6 +113,25 @@
         <div id="puzzle-board"></div>
     </div>
 
+    <!-- Intro Modal -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-amber-500 mx-4 shadow-2xl shadow-amber-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black mb-2 text-amber-500">PROTOCOL ENTROPY</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>The core data is scrambled. Reorder the hex blocks to decrypt the sequence.</p>
+                <div class="bg-black p-4 border border-slate-800 rounded">
+                    <ul class="list-disc pl-4 space-y-2 text-slate-300">
+                        <li>Click any tile in the same <span class="text-amber-400 font-bold">row or column</span> as the empty space to slide it.</li>
+                        <li>Arrange the tiles in order from <span class="text-white font-bold">01 to N</span>.</li>
+                        <li>The empty space must be at the <span class="text-red-400 font-bold">bottom-right</span> corner.</li>
+                        <li>Tiles in their correct position will highlight in amber.</li>
+                    </ul>
+                </div>
+            </div>
+            <button onclick="window.startGame()" class="w-full text-black font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base bg-amber-500 hover:bg-amber-400">INITIATE DEFRAG</button>
+        </div>
+    </div>
+
     <!-- Win Modal -->
     <div id="win-modal" class="modal-overlay hidden">
         <div class="panel p-8 max-w-sm w-full text-center">
@@ -224,10 +243,26 @@ function renderBoard() {
 
 function clickTile(idx) {
     if (B.done) return;
-    const moves = validMoves();
-    if (!moves.includes(idx)) return;
-    swap(idx, B.emptyIdx);
-    B.emptyIdx = idx;
+    const {size, emptyIdx} = B;
+    const r = Math.floor(idx / size), c = idx % size;
+    const er = Math.floor(emptyIdx / size), ec = emptyIdx % size;
+
+    if (r !== er && c !== ec) return; 
+
+    const toShift = [];
+    if (r === er) {
+        const step = c < ec ? 1 : -1;
+        for (let i = idx; i !== emptyIdx; i += step) toShift.push(i);
+    } else {
+        const step = r < er ? size : -size;
+        for (let i = idx; i !== emptyIdx; i += step) toShift.push(i);
+    }
+
+    for (let k = toShift.length - 1; k >= 0; k--) {
+        swap(B.emptyIdx, toShift[k]);
+        B.emptyIdx = toShift[k];
+    }
+    
     B.moves++;
     updateMoves();
     renderBoard();
@@ -237,10 +272,6 @@ function clickTile(idx) {
 
 function checkWin() {
     const n = B.size * B.size;
-    const won = B.tiles.every((v, i) => i < n-1 ? v === i+1 : v === 0) ||
-                B.tiles.every((v, i) => v === i);
-    // Actually check: tiles[i] === i for all (blank at end = size*size-1 index = 0 value)
-    // Standard: 1,2,...,n-1,0
     const correct = B.tiles.slice(0,-1).every((v,i) => v === i+1) && B.tiles[B.size*B.size-1] === 0;
     if (correct) {
         B.done = true;
@@ -276,14 +307,16 @@ function updateBest() {
 }
 
 window.solveHint = function() {
-    // Find a tile that's not in place and move it toward goal if possible
     const moves = validMoves();
-    // Prefer moves that put a tile in correct position
     for (const m of moves) {
         if (B.tiles[m] === m + 1) { clickTile(m); return; }
     }
-    // Otherwise random valid move
     clickTile(moves[Math.floor(Math.random() * moves.length)]);
+};
+
+window.startGame = function() {
+    document.getElementById('intro-modal').classList.add('hidden');
+    setDiff(4); 
 };
 
 window.shuffleBoard = shuffleBoard;
@@ -297,7 +330,6 @@ document.getElementById('puzzle-board').addEventListener('touchend', e => {
     const dx=e.changedTouches[0].clientX-tStart.x, dy=e.changedTouches[0].clientY-tStart.y;
     tStart=null;
     if (Math.abs(dx)+Math.abs(dy) < 15) return;
-    // Move empty in swipe direction (i.e., swipe right moves tile from right into empty)
     const r=Math.floor(B.emptyIdx/B.size), c=B.emptyIdx%B.size;
     let target = -1;
     if (Math.abs(dx) > Math.abs(dy)) { target = dx>0 && c<B.size-1 ? B.emptyIdx+1 : dx<0 && c>0 ? B.emptyIdx-1 : -1; }

@@ -41,8 +41,8 @@
             white-space: nowrap;
         }
         .grid-cell {
-            width: clamp(24px,5.5vw,44px);
-            height: clamp(24px,5.5vw,44px);
+            width: clamp(32px, 7vw, 56px);
+            height: clamp(32px, 7vw, 56px);
             background: #020b0e;
             border: 1px solid #0a2030;
             cursor: pointer;
@@ -126,6 +126,25 @@
         <div id="error-msg" class="text-[10px] text-red-400 orbitron tracking-widest hidden">SIGNAL MISMATCH — ERRORS HIGHLIGHTED</div>
 
     </main>
+
+    <!-- Intro Modal -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-cyan-500 mx-4 shadow-2xl shadow-cyan-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black mb-2 text-cyan-400">PROTOCOL STATIC</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>Recover the corrupted binary image by following the row and column signatures.</p>
+                <div class="bg-black p-4 border border-slate-800 rounded">
+                    <ul class="list-disc pl-4 space-y-2 text-slate-300">
+                        <li>The numbers indicate unbroken blocks of <span class="text-cyan-400 font-bold">filled cells</span> in that row or column.</li>
+                        <li>Multiple numbers mean there is at least one <span class="text-white font-bold">empty space</span> between the blocks.</li>
+                        <li>Use <span class="text-white font-bold">FILL</span> mode to restore cells, and <span class="text-red-400 font-bold">MARK (✕)</span> for empty space.</li>
+                        <li>Clues turn <span class="text-emerald-500 font-bold">green</span> when a row/column is satisfied.</li>
+                    </ul>
+                </div>
+            </div>
+            <button onclick="window.startGame()" class="w-full text-black font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base bg-cyan-500 hover:bg-cyan-400">INITIATE RECOVERY</button>
+        </div>
+    </div>
 
     <!-- Win Modal -->
     <div id="win-modal" class="modal-overlay hidden">
@@ -255,11 +274,10 @@ function renderTable() {
         }
         for (let c = 0; c < sz; c++) {
             const td = document.createElement('td');
-            td.className = 'clue-cell' + ((c+1)%5===0 ? ' five-border-right' : '');
+            td.className = 'clue-cell col-clue-' + c + ((c+1)%5===0 ? ' five-border-right' : '');
             const clue = colClues[c];
             const offset = maxColH - clue.length;
             td.textContent = ci >= offset ? clue[ci - offset] : '';
-            td.id = `cclue-${c}`;
             tr.appendChild(td);
         }
         tbl.appendChild(tr);
@@ -272,10 +290,9 @@ function renderTable() {
         const clue = rowClues[r];
         for (let i = 0; i < maxRowW; i++) {
             const td = document.createElement('td');
-            td.className = 'clue-cell-row';
+            td.className = 'clue-cell-row row-clue-' + r;
             const offset = maxRowW - clue.length;
             td.textContent = i >= offset ? clue[i - offset] : '';
-            if (i === maxRowW-1) td.id = `rclue-${r}`;
             tr.appendChild(td);
         }
         for (let c = 0; c < sz; c++) {
@@ -298,7 +315,32 @@ function renderTable() {
         tbl.appendChild(tr);
     }
     document.addEventListener('mouseup', () => { P.dragging=false; });
+    updateClueHighlights();
     document.addEventListener('touchend', () => { P.dragging=false; });
+}
+
+function updateClueHighlights() {
+    const sz = P.size;
+    // Rows
+    for (let r = 0; r < sz; r++) {
+        const curClues = getClues(P.userGrid[r].map(v => v===1?1:0));
+        const tgtClues = getClues(P.grid[r]);
+        const isMatch = curClues.join(',') === tgtClues.join(',');
+        document.querySelectorAll('.row-clue-' + r).forEach(el => {
+            if (isMatch) el.classList.add('clue-correct');
+            else el.classList.remove('clue-correct');
+        });
+    }
+    // Cols
+    for (let c = 0; c < sz; c++) {
+        const curClues = getClues(P.userGrid.map(row => row[c]===1?1:0));
+        const tgtClues = getClues(P.grid.map(row => row[c]));
+        const isMatch = curClues.join(',') === tgtClues.join(',');
+        document.querySelectorAll('.col-clue-' + c).forEach(el => {
+            if (isMatch) el.classList.add('clue-correct');
+            else el.classList.remove('clue-correct');
+        });
+    }
 }
 
 function startDrag(r,c) {
@@ -314,13 +356,14 @@ function doDrag(r,c) {
     setCellValue(r,c, P.dragValue);
 }
 
-function setCellValue(r,c,v) {
-    P.userGrid[r][c] = v;
-    const el = document.getElementById(`cell-${r}-${c}`);
-    if (!el) return;
-    el.className = el.className.replace(/ filled| marked| error/g,'');
-    if (v===1) el.classList.add('filled');
-    else if (v===2) el.classList.add('marked');
+function setCellValue(r,c,val) {
+    P.userGrid[r][c] = val;
+    const td = document.getElementById(`cell-${r}-${c}`);
+    if (!td) return;
+    td.classList.toggle('filled', val===1);
+    td.classList.toggle('marked', val===2);
+    td.classList.remove('error'); // clear error on change
+    updateClueHighlights();
     updateProgress();
 }
 
@@ -356,22 +399,21 @@ function checkSolution() {
 }
 
 function resetPuzzle() {
-    P.userGrid = Array.from({length:P.size}, () => Array(P.size).fill(0));
-    document.getElementById('error-msg').classList.add('hidden');
-    for (let r=0;r<P.size;r++) for (let c=0;c<P.size;c++) {
-        const el=document.getElementById(`cell-${r}-${c}`);
-        if(el) el.className = el.className.replace(/ filled| marked| error/g,'');
-    }
-    document.getElementById('progress-bar').style.width = '0%';
+    loadPuzzle(P.puzzleIdx);
 }
 
-window.nextPuzzle = () => loadPuzzle(P.puzzleIdx+1);
+window.nextPuzzle = () => loadPuzzle(P.puzzleIdx + 1);
 window.resetPuzzle = resetPuzzle;
 window.checkSolution = checkSolution;
 window.setMode = setMode;
 
-loadPuzzle(0);
+window.startGame = function() {
+    document.getElementById('intro-modal').classList.add('hidden');
+    loadPuzzle(0);
+};
+
+// Start logic shifted to button
+// loadPuzzle(0);
 </script>
 </body>
 </html>
-
