@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Maze — Navigate procedurally generated network mazes under fog-of-war. Find the exit before the trace locks.">
+    <title>ICE // Maze Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --bg:#05030a; --accent:#f97316; --accent-dim:rgba(249,115,22,0.15); --grid-bg:#0b0714; }
+        * { box-sizing:border-box; }
+        body { background:var(--bg); color:#d1d5db; font-family:'JetBrains Mono',monospace; margin:0; overflow:hidden; user-select:none; -webkit-tap-highlight-color:transparent; }
+        .orbitron { font-family:'Orbitron',sans-serif; }
+        .panel { background:var(--grid-bg); border:1px solid #2a1a0a; box-shadow:4px 4px 0 rgba(0,0,0,0.8); position:relative; }
+        .panel::before { content:''; position:absolute; top:0; left:0; width:10px; height:10px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+        .crt-overlay { position:fixed;inset:0;pointer-events:none;z-index:50;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.2) 50%),linear-gradient(90deg,rgba(255,0,0,0.04),rgba(0,255,0,0.01),rgba(0,0,255,0.04));background-size:100% 2px,3px 100%; }
+        .modal-overlay { position:fixed;inset:0;background:rgba(5,3,10,0.97);backdrop-filter:blur(8px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+        .hidden { display:none!important; }
+
+        #maze-canvas { display:block; border-radius:8px; }
+
+        /* D-pad for mobile */
+        .dpad { display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:4px; width:140px; height:140px; }
+        .dpad-btn { background:rgba(249,115,22,0.1); border:1px solid rgba(249,115,22,0.25); border-radius:8px; color:#f97316; font-size:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.1s; -webkit-tap-highlight-color:transparent; }
+        .dpad-btn:active { background:rgba(249,115,22,0.3); transform:scale(0.9); }
+        .dpad-center { background:rgba(249,115,22,0.05); cursor:default; }
+    </style>
+</head>
+<body class="flex flex-col" style="height:100dvh; overflow:hidden;">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full border-b border-orange-900/30 p-3 sm:p-4 flex justify-between items-center z-10 flex-shrink-0" style="background:#0b0714">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-orange-500 tracking-widest">PROTOCOL<span class="text-white">MAZE</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-orange-800 tracking-[0.3em]">SECTOR_NAV // FOG_OF_WAR</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4 text-[10px]">
+            <div class="text-right">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Level</div>
+                <div id="level-display" class="text-xl font-black text-white orbitron">01</div>
+            </div>
+            <div class="text-right">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Moves</div>
+                <div id="moves-display" class="text-xl font-black text-orange-400 orbitron">000</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex flex-col md:flex-row items-center justify-center gap-4 p-4 overflow-hidden">
+        <!-- Maze canvas -->
+        <div class="flex items-center justify-center" style="flex:1; overflow:hidden;">
+            <canvas id="maze-canvas"></canvas>
+        </div>
+
+        <!-- D-pad (mobile) -->
+        <div class="flex flex-col items-center gap-3 flex-shrink-0">
+            <div class="dpad">
+                <div></div>
+                <div class="dpad-btn" id="btn-up" onclick="move(0,-1)">▲</div>
+                <div></div>
+                <div class="dpad-btn" id="btn-left" onclick="move(-1,0)">◀</div>
+                <div class="dpad-center dpad-btn">⬡</div>
+                <div class="dpad-btn" id="btn-right" onclick="move(1,0)">▶</div>
+                <div></div>
+                <div class="dpad-btn" id="btn-down" onclick="move(0,1)">▼</div>
+                <div></div>
+            </div>
+            <div class="text-[9px] text-slate-600 text-center">WASD / ARROWS / D-PAD</div>
+            <button onclick="genMaze()" class="text-[9px] orbitron text-orange-500 border border-orange-900/50 px-4 py-2 rounded hover:bg-orange-500/10 transition-colors tracking-widest">NEW MAZE</button>
+        </div>
+    </div>
+
+    <!-- Win Modal -->
+    <div id="win-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div class="text-5xl mb-4">🚀</div>
+            <h2 class="orbitron text-2xl font-black text-orange-400 mb-2">EXIT REACHED</h2>
+            <p id="win-sub" class="text-[11px] text-slate-400 mb-8 tracking-widest"></p>
+            <div class="flex gap-3">
+                <button onclick="nextLevel()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-black rounded" style="background:#f97316">NEXT SECTOR</button>
+                <button onclick="genMaze()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-slate-400 bg-black border border-slate-700 rounded hover:text-white">NEW MAZE</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// PROTOCOL MAZE — DFS Recursive Backtracker Maze Generator
+// ============================================================
+
+let M = {
+    level: 1,
+    cols: 11,
+    rows: 11,
+    cells: [],      // flat array, each cell has {top,right,bottom,left} walls
+    visited: [],    // fog of war
+    px: 0, py: 0,  // player position
+    ex: 0, ey: 0,  // exit position
+    moves: 0,
+    cellPx: 32,
+    done: false,
+};
+
+const canvas = document.getElementById('maze-canvas');
+const ctx = canvas.getContext('2d');
+
+function sizeForLevel(lv) {
+    // Grows with level, always odd
+    const s = Math.min(11 + (lv - 1) * 2, 31);
+    return s % 2 === 0 ? s + 1 : s;
+}
+
+function genMaze() {
+    M.done = false;
+    document.getElementById('win-modal').classList.add('hidden');
+    const sz = sizeForLevel(M.level);
+    M.cols = sz; M.rows = sz;
+    M.cells = Array.from({length: M.rows * M.cols}, () => ({ top:true, right:true, bottom:true, left:true }));
+    M.visited = Array(M.rows * M.cols).fill(false);
+    M.moves = 0;
+    document.getElementById('moves-display').textContent = '000';
+    document.getElementById('level-display').textContent = String(M.level).padStart(2,'0');
+
+    // DFS backtracker
+    const seen = Array(M.rows * M.cols).fill(false);
+    const stack = [[0, 0]];
+    seen[0] = true;
+    while (stack.length) {
+        const [cx, cy] = stack[stack.length - 1];
+        const neighbors = [];
+        [[0,-2],[2,0],[0,2],[-2,0]].forEach(([dx,dy]) => {
+            const nx = cx+dx, ny = cy+dy;
+            if (nx >= 0 && nx < M.cols && ny >= 0 && ny < M.rows && !seen[ny*M.cols+nx]) {
+                neighbors.push([nx,ny,dx,dy]);
+            }
+        });
+        if (neighbors.length) {
+            const [nx,ny,dx,dy] = neighbors[Math.floor(Math.random()*neighbors.length)];
+            // Remove wall between (cx,cy) and (nx,ny)
+            const wx = cx + dx/2, wy = cy + dy/2;
+            if (dy === -2) { M.cells[cy*M.cols+cx].top = false; M.cells[wy*M.cols+wx].top = false; M.cells[wy*M.cols+wx].bottom = false; M.cells[ny*M.cols+nx].bottom = false; }
+            if (dx === 2)  { M.cells[cy*M.cols+cx].right = false; M.cells[wy*M.cols+wx].right = false; M.cells[wy*M.cols+wx].left = false; M.cells[ny*M.cols+nx].left = false; }
+            if (dy === 2)  { M.cells[cy*M.cols+cx].bottom = false; M.cells[wy*M.cols+wx].bottom = false; M.cells[wy*M.cols+wx].top = false; M.cells[ny*M.cols+nx].top = false; }
+            if (dx === -2) { M.cells[cy*M.cols+cx].left = false; M.cells[wy*M.cols+wx].left = false; M.cells[wy*M.cols+wx].right = false; M.cells[ny*M.cols+nx].right = false; }
+            seen[ny*M.cols+nx] = true;
+            stack.push([nx,ny]);
+        } else {
+            stack.pop();
+        }
+    }
+
+    M.px = 0; M.py = 0;
+    M.ex = M.cols - 1; M.ey = M.rows - 1;
+    M.visited = Array(M.rows * M.cols).fill(false);
+    revealAround(M.px, M.py);
+    resize();
+}
+
+function revealAround(x, y, radius=2) {
+    for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+            const nx=x+dx, ny=y+dy;
+            if (nx>=0&&nx<M.cols&&ny>=0&&ny<M.rows) M.visited[ny*M.cols+nx] = true;
+        }
+    }
+}
+
+function resize() {
+    const avail = Math.min(
+        canvas.parentElement.clientWidth - 16,
+        canvas.parentElement.clientHeight - 16,
+        500
+    );
+    M.cellPx = Math.max(8, Math.floor(avail / M.cols));
+    canvas.width = M.cellPx * M.cols;
+    canvas.height = M.cellPx * M.rows;
+    draw();
+}
+
+function draw() {
+    const cp = M.cellPx;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < M.rows; y++) {
+        for (let x = 0; x < M.cols; x++) {
+            const idx = y*M.cols+x;
+            const vis = M.visited[idx];
+            const isPlayer = x===M.px && y===M.py;
+            const isExit = x===M.ex && y===M.ey;
+
+            if (!vis) {
+                ctx.fillStyle = '#030508';
+                ctx.fillRect(x*cp+1, y*cp+1, cp-1, cp-1);
+                continue;
+            }
+
+            // Cell fill
+            if (isPlayer) {
+                ctx.fillStyle = 'rgba(249,115,22,0.15)';
+            } else if (isExit) {
+                ctx.fillStyle = 'rgba(16,185,129,0.15)';
+            } else {
+                ctx.fillStyle = '#060410';
+            }
+            ctx.fillRect(x*cp, y*cp, cp, cp);
+
+            // Walls
+            const cell = M.cells[idx];
+            ctx.strokeStyle = '#3a2060';
+            ctx.lineWidth = 1.5;
+            if (cell.top)    { ctx.beginPath(); ctx.moveTo(x*cp,y*cp);          ctx.lineTo((x+1)*cp,y*cp);          ctx.stroke(); }
+            if (cell.right)  { ctx.beginPath(); ctx.moveTo((x+1)*cp,y*cp);      ctx.lineTo((x+1)*cp,(y+1)*cp);      ctx.stroke(); }
+            if (cell.bottom) { ctx.beginPath(); ctx.moveTo(x*cp,(y+1)*cp);      ctx.lineTo((x+1)*cp,(y+1)*cp);      ctx.stroke(); }
+            if (cell.left)   { ctx.beginPath(); ctx.moveTo(x*cp,y*cp);          ctx.lineTo(x*cp,(y+1)*cp);          ctx.stroke(); }
+        }
+    }
+
+    // Exit marker (if visible)
+    if (M.visited[M.ey*M.cols+M.ex]) {
+        const ex = M.ex*cp + cp/2, ey = M.ey*cp + cp/2;
+        ctx.shadowColor = '#10b981'; ctx.shadowBlur = 12;
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath(); ctx.arc(ex, ey, cp*0.28, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // Player
+    const px = M.px*cp + cp/2, py = M.py*cp + cp/2;
+    ctx.shadowColor = '#f97316'; ctx.shadowBlur = 16;
+    ctx.fillStyle = '#f97316';
+    ctx.beginPath(); ctx.arc(px, py, cp*0.3, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    // Player dot
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(px, py, cp*0.12, 0, Math.PI*2); ctx.fill();
+}
+
+function canMove(x, y, dx, dy) {
+    const cell = M.cells[y*M.cols+x];
+    if (dx === 1  && cell.right)  return false;
+    if (dx === -1 && cell.left)   return false;
+    if (dy === 1  && cell.bottom) return false;
+    if (dy === -1 && cell.top)    return false;
+    const nx=x+dx, ny=y+dy;
+    if (nx<0||nx>=M.cols||ny<0||ny>=M.rows) return false;
+    return true;
+}
+
+window.move = function(dx, dy) {
+    if (M.done) return;
+    if (!canMove(M.px, M.py, dx, dy)) return;
+    M.px += dx; M.py += dy;
+    M.moves++;
+    document.getElementById('moves-display').textContent = String(M.moves).padStart(3,'0');
+    revealAround(M.px, M.py);
+    draw();
+    if (M.px === M.ex && M.py === M.ey) {
+        M.done = true;
+        document.getElementById('win-sub').textContent = `SECTOR ${M.level} CLEARED — ${M.moves} MOVES`;
+        setTimeout(() => document.getElementById('win-modal').classList.remove('hidden'), 400);
+    }
+};
+
+window.nextLevel = function() {
+    M.level++;
+    document.getElementById('win-modal').classList.add('hidden');
+    genMaze();
+};
+
+// Keyboard
+window.addEventListener('keydown', e => {
+    const map = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0], W:[0,-1], S:[0,1], A:[-1,0], D:[1,0] };
+    const dir = map[e.key];
+    if (dir) { e.preventDefault(); move(...dir); }
+});
+
+window.addEventListener('resize', resize);
+
+// Touch swipe
+let touchStart = null;
+canvas.addEventListener('touchstart', e => { touchStart = {x:e.touches[0].clientX,y:e.touches[0].clientY}; }, {passive:true});
+canvas.addEventListener('touchend', e => {
+    if (!touchStart) return;
+    const dx=e.changedTouches[0].clientX-touchStart.x, dy=e.changedTouches[0].clientY-touchStart.y;
+    touchStart=null;
+    if (Math.abs(dx)+Math.abs(dy)<20) return;
+    if (Math.abs(dx)>Math.abs(dy)) move(dx>0?1:-1,0); else move(0,dy>0?1:-1);
+}, {passive:true});
+
+genMaze();
+</script>
+</body>
+</html>
+

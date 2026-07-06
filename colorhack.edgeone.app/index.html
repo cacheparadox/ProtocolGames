@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="ColorHack — Mastermind-style color decryption. Crack the corporate mainframe's color-sequence keys through logical deduction.">
+    <title>ICE // Firewall Override</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050508;
+            --term-cyan: #0ea5e9;
+            --term-pink: #ec4899;
+            --term-yellow: #eab308;
+            --term-emerald: #10b981;
+            --term-orange: #f97316;
+            --term-purple: #8b5cf6;
+            --grid-bg: #0a0b10;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Panel Styling */
+        .panel {
+            background: var(--grid-bg);
+            border: 1px solid #1e293b;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+            position: relative;
+        }
+        
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid #ef4444; border-left: 2px solid #ef4444;
+        }
+
+        /* Nodes */
+        .data-node {
+            aspect-ratio: 1;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: clamp(0.7rem, 3vw, 1rem);
+            color: #fff;
+            border: 2px solid transparent;
+            transition: all 0.15s;
+        }
+
+        .node-btn { cursor: pointer; }
+        .node-btn:active { transform: scale(0.95); }
+        .node-empty { background: #000; border-color: #1e293b; color: #334155; }
+        
+        .node-0 { background: rgba(14, 165, 233, 0.2); border-color: var(--term-cyan); text-shadow: 0 0 5px var(--term-cyan); }
+        .node-1 { background: rgba(236, 72, 153, 0.2); border-color: var(--term-pink); text-shadow: 0 0 5px var(--term-pink); }
+        .node-2 { background: rgba(234, 179, 8, 0.2); border-color: var(--term-yellow); text-shadow: 0 0 5px var(--term-yellow); }
+        .node-3 { background: rgba(16, 185, 129, 0.2); border-color: var(--term-emerald); text-shadow: 0 0 5px var(--term-emerald); }
+        .node-4 { background: rgba(249, 115, 22, 0.2); border-color: var(--term-orange); text-shadow: 0 0 5px var(--term-orange); }
+        .node-5 { background: rgba(139, 92, 246, 0.2); border-color: var(--term-purple); text-shadow: 0 0 5px var(--term-purple); }
+
+        /* Feedback Indicators */
+        .fb-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+            width: clamp(24px, 8vw, 32px);
+            height: clamp(24px, 8vw, 32px);
+        }
+        
+        .fb-peg {
+            width: 100%; height: 100%;
+            background: #000;
+            border: 1px solid #1e293b;
+        }
+        .fb-exact { background: var(--term-emerald); border-color: var(--term-emerald); box-shadow: 0 0 8px var(--term-emerald); }
+        .fb-partial { background: transparent; border-color: var(--term-yellow); box-shadow: inset 0 0 4px var(--term-yellow); }
+
+        /* Rows */
+        .history-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px;
+            background: #050508;
+            border: 1px solid #1e293b;
+            gap: 12px;
+        }
+
+        .history-row.active-row {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.05);
+            box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.1);
+        }
+
+        /* Scanline Overlay */
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+            background-size: 100% 2px, 3px 100%;
+        }
+        
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(5, 5, 8, 0.95); backdrop-filter: blur(8px);
+            z-index: 100; display: flex; align-items: center; justify-content: center;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <!-- Top Bar -->
+    <header class="w-full bg-[#0a0b10] border-b border-red-900/30 p-3 sm:p-4 flex justify-between items-center z-10">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-red-500 tracking-widest">FIREWALL</h1>
+                <div class="text-[8px] sm:text-[10px] text-red-700 tracking-[0.3em]">SEC_PORT // ENCRYPTED</div>
+            </div>
+        </div>
+        <div class="text-right">
+            <div class="text-[8px] sm:text-[10px] uppercase text-slate-500 tracking-widest mb-0.5">Security Level</div>
+            <div id="level-display" class="text-xl sm:text-2xl font-black text-white orbitron leading-none">01</div>
+        </div>
+    </header>
+
+    <!-- Main Interface -->
+    <main class="flex-1 flex flex-col p-3 sm:p-6 max-w-2xl mx-auto w-full z-10 gap-4 sm:gap-6">
+        
+        <!-- Header Info -->
+        <div class="flex justify-between items-end px-2">
+            <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">
+                Traffic Log <span id="attempt-count" class="text-red-500 ml-2">[ 0 / 8 ]</span>
+            </div>
+            <div class="text-[8px] sm:text-[10px] text-slate-600 uppercase tracking-widest">Target: 4 Nodes</div>
+        </div>
+
+        <!-- Board -->
+        <div class="panel p-3 sm:p-6 flex-1 overflow-y-auto flex flex-col-reverse gap-2" id="board-container">
+            <!-- Rows injected here -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="panel p-4 sm:p-6 mt-auto">
+            
+            <div class="flex justify-between items-center mb-4 sm:mb-6">
+                <div class="flex gap-2 w-full max-w-[240px]" id="current-input">
+                    <!-- Input slots injected here -->
+                </div>
+                <button onclick="window.submitUpload()" id="submit-btn" class="ml-4 bg-slate-800 text-slate-500 font-black py-3 px-4 sm:px-6 rounded uppercase tracking-widest text-xs sm:text-sm transition-colors border border-slate-700 pointer-events-none">
+                    UPLOAD
+                </button>
+            </div>
+
+            <!-- Keyboard -->
+            <div class="grid grid-cols-6 gap-2 sm:gap-3 border-t border-slate-800 pt-4 sm:pt-6">
+                <div onclick="window.typeNode(0)" class="data-node node-btn node-0">CYN</div>
+                <div onclick="window.typeNode(1)" class="data-node node-btn node-1">PNK</div>
+                <div onclick="window.typeNode(2)" class="data-node node-btn node-2">YLW</div>
+                <div onclick="window.typeNode(3)" class="data-node node-btn node-3">EMR</div>
+                <div onclick="window.typeNode(4)" class="data-node node-btn node-4">ORG</div>
+                <div onclick="window.typeNode(5)" class="data-node node-btn node-5">VLT</div>
+            </div>
+            
+            <div class="flex justify-between mt-4">
+                <button onclick="window.clearInput()" class="text-[9px] sm:text-[10px] text-slate-500 hover:text-red-400 uppercase tracking-[0.2em] font-bold p-2 transition-colors">
+                    [ BACKSPACE ]
+                </button>
+                <button onclick="window.abortHack()" class="text-[9px] sm:text-[10px] text-slate-500 hover:text-red-500 uppercase tracking-[0.5em] font-bold p-2 transition-colors">
+                    Disconnect
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-red-500 mx-4 shadow-2xl shadow-red-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black text-red-500 mb-2">MASTERMIND PROTOCOL</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>The Firewall is protected by a hidden sequence of 4 Data Nodes. You must deduce the sequence before your connection is traced.</p>
+                <div class="bg-black p-4 border border-slate-800 rounded">
+                    <p class="font-bold text-slate-300 mb-2 text-[10px] uppercase">Post-Upload Feedback:</p>
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-3 h-3 bg-emerald-500 border border-emerald-500 shadow-[0_0_8px_#10b981]"></div>
+                        <span class="text-emerald-400 text-xs">= Exact Match (Right Node, Right Slot)</span>
+                    </div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-3 h-3 bg-transparent border border-yellow-500 shadow-[inset_0_0_4px_#eab308]"></div>
+                        <span class="text-yellow-500 text-xs">= Partial Trace (Right Node, Wrong Slot)</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 bg-black border border-slate-800"></div>
+                        <span class="text-slate-500 text-xs">= Connection Dropped (Node not in sequence)</span>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-500 uppercase">Note: Node colors can repeat in the target sequence.</p>
+            </div>
+            <button onclick="window.initFirewall()" class="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base">INITIATE BRUTEFORCE</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full text-center border-t-4 mx-4 shadow-2xl" id="result-box">
+            <h2 id="result-title" class="orbitron text-2xl sm:text-3xl font-black mb-2"></h2>
+            <p id="result-sub" class="text-xs sm:text-sm mb-6 uppercase tracking-widest text-slate-400"></p>
+            
+            <div class="mb-6 text-left">
+                <div class="text-[10px] text-slate-500 uppercase tracking-widest mb-2">Target Sequence Was:</div>
+                <div id="result-target" class="flex gap-2 justify-center"></div>
+            </div>
+
+            <button id="result-btn" onclick="window.initFirewall()" class="w-full font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base"></button>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const NODE_LABELS = ['CYN', 'PNK', 'YLW', 'EMR', 'ORG', 'VLT'];
+            const SEQ_LENGTH = 4;
+            
+            let state = {
+                level: 1,
+                target: [],
+                history: [],
+                currentInput: [],
+                maxAttempts: 8,
+                status: 'idle'
+            };
+
+            window.abortHack = () => {
+                state.level = 1;
+                document.getElementById('result-modal').classList.add('hidden');
+                document.getElementById('intro-modal').classList.remove('hidden');
+            };
+
+            window.initFirewall = () => {
+                document.getElementById('intro-modal').classList.add('hidden');
+                document.getElementById('result-modal').classList.add('hidden');
+                
+                // Difficulty Scaling
+                state.maxAttempts = Math.max(5, 9 - Math.floor(state.level / 2)); // Gets harder
+
+                // Generate Target (Allowing duplicates)
+                state.target = [];
+                for(let i=0; i<SEQ_LENGTH; i++) {
+                    state.target.push(Math.floor(Math.random() * 6));
+                }
+
+                state.history = [];
+                state.currentInput = [];
+                state.status = 'playing';
+
+                document.getElementById('level-display').innerText = state.level.toString().padStart(2, '0');
+                
+                renderBoard();
+                renderInput();
+            };
+
+            window.typeNode = (nodeId) => {
+                if(state.status !== 'playing' || state.currentInput.length >= SEQ_LENGTH) return;
+                state.currentInput.push(nodeId);
+                renderInput();
+            };
+
+            window.clearInput = () => {
+                if(state.status !== 'playing' || state.currentInput.length === 0) return;
+                state.currentInput.pop();
+                renderInput();
+            };
+
+            window.submitUpload = () => {
+                if(state.status !== 'playing' || state.currentInput.length !== SEQ_LENGTH) return;
+                
+                const feedback = calculateFeedback(state.currentInput, state.target);
+                
+                state.history.push({
+                    guess: [...state.currentInput],
+                    feedback: feedback
+                });
+
+                state.currentInput = [];
+                
+                if (feedback.exact === SEQ_LENGTH) {
+                    endGame(true);
+                } else if (state.history.length >= state.maxAttempts) {
+                    endGame(false);
+                } else {
+                    renderBoard();
+                    renderInput();
+                }
+            };
+
+            function calculateFeedback(guess, target) {
+                let exact = 0;
+                let partial = 0;
+                let tCopy = [...target];
+                let gCopy = [...guess];
+
+                // 1. Check exact matches
+                for (let i = 0; i < SEQ_LENGTH; i++) {
+                    if (gCopy[i] === tCopy[i]) {
+                        exact++;
+                        tCopy[i] = null; // Mark as consumed
+                        gCopy[i] = null;
+                    }
+                }
+
+                // 2. Check partial matches
+                for (let i = 0; i < SEQ_LENGTH; i++) {
+                    if (gCopy[i] !== null) {
+                        let matchIdx = tCopy.indexOf(gCopy[i]);
+                        if (matchIdx !== -1) {
+                            partial++;
+                            tCopy[matchIdx] = null; // Mark as consumed
+                        }
+                    }
+                }
+
+                // Mastermind scrambles the feedback pegs so position doesn't give away the answer
+                let pegs = [];
+                for(let i=0; i<exact; i++) pegs.push('exact');
+                for(let i=0; i<partial; i++) pegs.push('partial');
+                while(pegs.length < SEQ_LENGTH) pegs.push('empty');
+                
+                return { exact, partial, pegs };
+            }
+
+            function renderBoard() {
+                const bc = document.getElementById('board-container');
+                let html = '';
+
+                // Render empty future rows
+                const remaining = state.maxAttempts - state.history.length - 1;
+                for(let i=0; i<remaining; i++) {
+                    html = createRowHTML([], []) + html;
+                }
+
+                // Render current active row placeholder
+                if (state.status === 'playing') {
+                    html = `<div class="history-row active-row">
+                                <div class="flex gap-2 flex-1">
+                                    ${Array(SEQ_LENGTH).fill('<div class="data-node node-empty w-full">?</div>').join('')}
+                                </div>
+                                <div class="fb-grid">
+                                    ${Array(SEQ_LENGTH).fill('<div class="fb-peg"></div>').join('')}
+                                </div>
+                            </div>` + html;
+                }
+
+                // Render history
+                for(let i = state.history.length - 1; i >= 0; i--) {
+                    html = createRowHTML(state.history[i].guess, state.history[i].feedback.pegs) + html;
+                }
+
+                bc.innerHTML = html;
+                document.getElementById('attempt-count').innerText = `[ ${state.history.length} / ${state.maxAttempts} ]`;
+            }
+
+            function createRowHTML(guessArr, pegsArr) {
+                let nodesHTML = '';
+                for(let i=0; i<SEQ_LENGTH; i++) {
+                    if(i < guessArr.length) {
+                        nodesHTML += `<div class="data-node node-${guessArr[i]} w-full">${NODE_LABELS[guessArr[i]]}</div>`;
+                    } else {
+                        nodesHTML += `<div class="data-node node-empty w-full"></div>`;
+                    }
+                }
+
+                let pegsHTML = '';
+                for(let i=0; i<SEQ_LENGTH; i++) {
+                    let pegClass = '';
+                    if(pegsArr[i] === 'exact') pegClass = 'fb-exact';
+                    else if(pegsArr[i] === 'partial') pegClass = 'fb-partial';
+                    pegsHTML += `<div class="fb-peg ${pegClass}"></div>`;
+                }
+
+                return `
+                    <div class="history-row opacity-60">
+                        <div class="flex gap-2 flex-1">${nodesHTML}</div>
+                        <div class="fb-grid">${pegsHTML}</div>
+                    </div>
+                `;
+            }
+
+            function renderInput() {
+                const ic = document.getElementById('current-input');
+                let html = '';
+                for(let i=0; i<SEQ_LENGTH; i++) {
+                    if(i < state.currentInput.length) {
+                        const val = state.currentInput[i];
+                        html += `<div class="data-node node-${val} w-full">${NODE_LABELS[val]}</div>`;
+                    } else {
+                        html += `<div class="data-node node-empty w-full border-dashed border-slate-700 animate-pulse"></div>`;
+                    }
+                }
+                ic.innerHTML = html;
+
+                const btn = document.getElementById('submit-btn');
+                if(state.currentInput.length === SEQ_LENGTH) {
+                    btn.classList.remove('bg-slate-800', 'text-slate-500', 'pointer-events-none', 'border-slate-700');
+                    btn.classList.add('bg-emerald-600', 'text-black', 'border-emerald-500', 'hover:bg-emerald-500');
+                } else {
+                    btn.classList.add('bg-slate-800', 'text-slate-500', 'pointer-events-none', 'border-slate-700');
+                    btn.classList.remove('bg-emerald-600', 'text-black', 'border-emerald-500', 'hover:bg-emerald-500');
+                }
+            }
+
+            function endGame(isWin) {
+                state.status = 'over';
+                renderBoard();
+                renderInput();
+
+                setTimeout(() => {
+                    const mod = document.getElementById('result-modal');
+                    const box = document.getElementById('result-box');
+                    const title = document.getElementById('result-title');
+                    const sub = document.getElementById('result-sub');
+                    const btn = document.getElementById('result-btn');
+                    const tg = document.getElementById('result-target');
+
+                    mod.classList.remove('hidden');
+
+                    // Show target
+                    tg.innerHTML = state.target.map(val => `<div class="data-node node-${val} w-12">${NODE_LABELS[val]}</div>`).join('');
+
+                    if(isWin) {
+                        box.style.borderColor = '#10b981';
+                        box.style.boxShadow = '0 0 50px rgba(16, 185, 129, 0.2)';
+                        title.innerText = "FIREWALL BREACHED";
+                        title.style.color = '#10b981';
+                        sub.innerText = `Bypassed in ${state.history.length} attempts.`;
+                        
+                        btn.innerText = "PROCEED TO NEXT PORT";
+                        btn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-black font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                        
+                        state.level++;
+                    } else {
+                        box.style.borderColor = '#ef4444';
+                        box.style.boxShadow = '0 0 50px rgba(239, 68, 68, 0.2)';
+                        title.innerText = "CONNECTION TRACED";
+                        title.style.color = '#ef4444';
+                        sub.innerText = "Maximum attempts reached. Access Denied.";
+                        
+                        btn.innerText = "REBOOT CONNECTION";
+                        btn.className = "w-full bg-red-900 hover:bg-red-800 text-white font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                        
+                        state.level = 1;
+                    }
+                }, 800);
+            }
+
+        })();
+    </script>
+</body>
+</html>

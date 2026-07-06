@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Entropy — Data fragmentation puzzle. Reassemble scrambled hex tile sequences back into correct order.">
+    <title>ICE // Entropy Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔢</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --bg:#050600; --accent:#f59e0b; --accent-dim:rgba(245,158,11,0.12); --grid-bg:#0a0a00; }
+        * { box-sizing:border-box; }
+        body { background:var(--bg); color:#d1d5db; font-family:'JetBrains Mono',monospace; margin:0; overflow:hidden; user-select:none; -webkit-tap-highlight-color:transparent; }
+        .orbitron { font-family:'Orbitron',sans-serif; }
+        .panel { background:var(--grid-bg); border:1px solid #1a1800; box-shadow:4px 4px 0 rgba(0,0,0,0.8); position:relative; }
+        .panel::before { content:''; position:absolute; top:0; left:0; width:10px; height:10px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+        .crt-overlay { position:fixed;inset:0;pointer-events:none;z-index:50;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.15) 50%),linear-gradient(90deg,rgba(255,0,0,0.04),rgba(0,255,0,0.01),rgba(0,0,255,0.04));background-size:100% 2px,3px 100%; }
+        .modal-overlay { position:fixed;inset:0;background:rgba(5,6,0,0.97);backdrop-filter:blur(8px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+        .hidden { display:none!important; }
+
+        #puzzle-board {
+            display: grid;
+            gap: clamp(3px, 0.8vw, 6px);
+            background: #000;
+            border: 1px solid rgba(245,158,11,0.2);
+            border-radius: 12px;
+            padding: clamp(8px, 1.5vw, 14px);
+            box-shadow: 0 0 40px rgba(245,158,11,0.05), inset 0 0 40px rgba(0,0,0,0.9);
+        }
+
+        .tile {
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.175,0.885,0.32,1.275);
+            position: relative;
+            border: 1px solid;
+        }
+        .tile:active { transform: scale(0.92); }
+        .tile.correct-pos { border-color: rgba(16,185,129,0.5); box-shadow: 0 0 10px rgba(16,185,129,0.2); }
+
+        .tile-normal {
+            background: linear-gradient(135deg, #1a1800 0%, #0a0900 100%);
+            border-color: rgba(245,158,11,0.3);
+            color: var(--accent);
+            text-shadow: 0 0 6px rgba(245,158,11,0.5);
+        }
+        .tile-normal:hover { background: var(--accent-dim); border-color: var(--accent); box-shadow: 0 0 12px rgba(245,158,11,0.2); }
+
+        .tile-empty {
+            background: #000;
+            border-color: #1a1800;
+            cursor: default;
+        }
+
+        /* Difficulty selector */
+        .diff-btn { padding:10px 20px; border-radius:6px; font-family:'Orbitron',sans-serif; font-size:11px; font-weight:900; letter-spacing:1px; cursor:pointer; border:1px solid; transition:all 0.2s; }
+        .diff-active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+        .diff-inactive { background:#0a0900; border-color:#1a1800; color:#374151; }
+        .diff-inactive:hover { border-color:#3a3000; color:#6b5a00; }
+    </style>
+</head>
+<body class="flex flex-col" style="height:100dvh; overflow:hidden;">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full border-b border-amber-900/30 p-3 sm:p-4 flex justify-between items-center z-10 flex-shrink-0" style="background:#0a0900">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-amber-400 tracking-widest">PROTOCOL<span class="text-white">ENTROPY</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-amber-900 tracking-[0.3em]">DATA_FRAG // REASSEMBLY</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4 text-[10px]">
+            <div class="text-center">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Moves</div>
+                <div id="moves-display" class="text-xl font-black text-amber-400 orbitron">000</div>
+            </div>
+            <div class="text-center">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Best</div>
+                <div id="best-display" class="text-xl font-black text-white orbitron">---</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Difficulty + Controls -->
+    <div class="flex items-center justify-between px-4 py-2 border-b border-amber-900/20 flex-shrink-0 bg-black/20">
+        <div class="flex gap-2">
+            <button class="diff-btn diff-active" id="diff-3" onclick="setDiff(3)">3×3</button>
+            <button class="diff-btn diff-inactive" id="diff-4" onclick="setDiff(4)">4×4</button>
+            <button class="diff-btn diff-inactive" id="diff-5" onclick="setDiff(5)">5×5</button>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="shuffleBoard()" class="text-[9px] orbitron text-amber-500 border border-amber-900/50 px-4 py-2 rounded hover:bg-amber-500/10 transition-colors">SHUFFLE</button>
+            <button onclick="solveHint()" class="text-[9px] orbitron text-slate-500 border border-slate-700 px-4 py-2 rounded hover:text-white transition-colors">HINT</button>
+        </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="flex items-center gap-3 px-4 py-2 flex-shrink-0">
+        <div class="text-[9px] text-slate-600 orbitron">REASSEMBLY</div>
+        <div class="flex-1 h-1.5 bg-amber-950/30 rounded">
+            <div id="progress-bar" class="h-full bg-amber-500 rounded transition-all duration-300" style="width:0%;box-shadow:0 0 6px #f59e0b"></div>
+        </div>
+        <div id="correct-count" class="text-[9px] text-amber-500 orbitron">0%</div>
+    </div>
+
+    <!-- Board -->
+    <div class="flex-1 flex items-center justify-center p-4 overflow-hidden">
+        <div id="puzzle-board"></div>
+    </div>
+
+    <!-- Win Modal -->
+    <div id="win-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div class="text-5xl mb-4">✅</div>
+            <h2 class="orbitron text-2xl font-black text-amber-400 mb-2">DATA RESTORED</h2>
+            <p id="win-sub" class="text-[11px] text-slate-400 mb-8 tracking-widest"></p>
+            <div class="flex gap-3">
+                <button onclick="shuffleBoard()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-black rounded bg-amber-500">SCRAMBLE AGAIN</button>
+                <button onclick="document.getElementById('win-modal').classList.add('hidden')" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-slate-400 bg-black border border-slate-700 rounded hover:text-white">REVIEW</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// PROTOCOL ENTROPY — N×N Sliding Tile Puzzle
+// ============================================================
+
+const HEX_CHARS = '0123456789ABCDEF';
+function hexLabel(n, size) {
+    return '0x' + n.toString(16).toUpperCase().padStart(size <= 3 ? 1 : 2, '0');
+}
+
+let B = {
+    size: 3,
+    tiles: [],   // 1D array, value=tile number (0=blank), index=position
+    emptyIdx: 0,
+    moves: 0,
+    best: {},
+    done: false,
+};
+
+function setDiff(s) {
+    B.size = s;
+    [3,4,5].forEach(d => {
+        document.getElementById(`diff-${d}`).className = 'diff-btn ' + (d===s ? 'diff-active' : 'diff-inactive');
+    });
+    initBoard();
+}
+
+function initBoard() {
+    const n = B.size * B.size;
+    B.tiles = Array.from({length:n}, (_,i)=>i);
+    B.emptyIdx = n - 1;
+    B.moves = 0;
+    B.done = false;
+    updateMoves();
+    updateBest();
+    renderBoard();
+    updateProgress();
+}
+
+function shuffleBoard() {
+    // Ensure solvable: do random valid moves from solved state
+    initBoard();
+    const shuffles = B.size * B.size * 50;
+    for (let i = 0; i < shuffles; i++) {
+        const moves = validMoves();
+        const pick = moves[Math.floor(Math.random() * moves.length)];
+        swap(pick, B.emptyIdx);
+        B.emptyIdx = pick;
+    }
+    B.moves = 0;
+    B.done = false;
+    document.getElementById('win-modal').classList.add('hidden');
+    updateMoves();
+    renderBoard();
+    updateProgress();
+}
+
+function validMoves() {
+    const {size, emptyIdx} = B;
+    const r = Math.floor(emptyIdx / size), c = emptyIdx % size;
+    const moves = [];
+    if (r > 0) moves.push((r-1)*size+c);
+    if (r < size-1) moves.push((r+1)*size+c);
+    if (c > 0) moves.push(r*size+(c-1));
+    if (c < size-1) moves.push(r*size+(c+1));
+    return moves;
+}
+
+function swap(i, j) { [B.tiles[i], B.tiles[j]] = [B.tiles[j], B.tiles[i]]; }
+
+function renderBoard() {
+    const board = document.getElementById('puzzle-board');
+    const avail = Math.min(board.parentElement.clientWidth - 32, board.parentElement.clientHeight - 32, 480);
+    const cellPx = Math.floor(avail / B.size) - 6;
+    board.style.gridTemplateColumns = `repeat(${B.size}, ${cellPx}px)`;
+
+    board.innerHTML = '';
+    B.tiles.forEach((val, idx) => {
+        const tile = document.createElement('div');
+        const isCorrect = val === idx && val !== 0;
+        const isEmpty = val === 0;
+        tile.style.width = cellPx + 'px';
+        tile.style.height = cellPx + 'px';
+        tile.style.fontSize = Math.max(10, cellPx * 0.28) + 'px';
+
+        if (isEmpty) {
+            tile.className = 'tile tile-empty';
+        } else {
+            tile.className = 'tile tile-normal' + (isCorrect ? ' correct-pos' : '');
+            tile.textContent = hexLabel(val, B.size);
+            tile.onclick = () => clickTile(idx);
+        }
+        board.appendChild(tile);
+    });
+}
+
+function clickTile(idx) {
+    if (B.done) return;
+    const moves = validMoves();
+    if (!moves.includes(idx)) return;
+    swap(idx, B.emptyIdx);
+    B.emptyIdx = idx;
+    B.moves++;
+    updateMoves();
+    renderBoard();
+    updateProgress();
+    checkWin();
+}
+
+function checkWin() {
+    const n = B.size * B.size;
+    const won = B.tiles.every((v, i) => i < n-1 ? v === i+1 : v === 0) ||
+                B.tiles.every((v, i) => v === i);
+    // Actually check: tiles[i] === i for all (blank at end = size*size-1 index = 0 value)
+    // Standard: 1,2,...,n-1,0
+    const correct = B.tiles.slice(0,-1).every((v,i) => v === i+1) && B.tiles[B.size*B.size-1] === 0;
+    if (correct) {
+        B.done = true;
+        const key = B.size;
+        if (!B.best[key] || B.moves < B.best[key]) {
+            B.best[key] = B.moves;
+            try { localStorage.setItem(`entropy_best_${key}`, B.moves); } catch(e){}
+        }
+        updateBest();
+        document.getElementById('win-sub').textContent = `${B.size}×${B.size} SOLVED IN ${B.moves} MOVES`;
+        setTimeout(() => document.getElementById('win-modal').classList.remove('hidden'), 300);
+    }
+}
+
+function updateProgress() {
+    const n = B.size * B.size - 1;
+    const correct = B.tiles.slice(0,-1).filter((v,i) => v === i+1).length;
+    const pct = Math.round(correct / n * 100);
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('correct-count').textContent = pct + '%';
+}
+
+function updateMoves() {
+    document.getElementById('moves-display').textContent = String(B.moves).padStart(3,'0');
+}
+
+function updateBest() {
+    const k = B.size;
+    if (!B.best[k]) {
+        try { const v = parseInt(localStorage.getItem(`entropy_best_${k}`)); if (!isNaN(v)) B.best[k]=v; } catch(e){}
+    }
+    document.getElementById('best-display').textContent = B.best[k] ? String(B.best[k]).padStart(3,'0') : '---';
+}
+
+window.solveHint = function() {
+    // Find a tile that's not in place and move it toward goal if possible
+    const moves = validMoves();
+    // Prefer moves that put a tile in correct position
+    for (const m of moves) {
+        if (B.tiles[m] === m + 1) { clickTile(m); return; }
+    }
+    // Otherwise random valid move
+    clickTile(moves[Math.floor(Math.random() * moves.length)]);
+};
+
+window.shuffleBoard = shuffleBoard;
+window.setDiff = setDiff;
+
+// Touch swipe on board
+let tStart = null;
+document.getElementById('puzzle-board').addEventListener('touchstart', e => { tStart = {x:e.touches[0].clientX,y:e.touches[0].clientY}; }, {passive:true});
+document.getElementById('puzzle-board').addEventListener('touchend', e => {
+    if (!tStart) return;
+    const dx=e.changedTouches[0].clientX-tStart.x, dy=e.changedTouches[0].clientY-tStart.y;
+    tStart=null;
+    if (Math.abs(dx)+Math.abs(dy) < 15) return;
+    // Move empty in swipe direction (i.e., swipe right moves tile from right into empty)
+    const r=Math.floor(B.emptyIdx/B.size), c=B.emptyIdx%B.size;
+    let target = -1;
+    if (Math.abs(dx) > Math.abs(dy)) { target = dx>0 && c<B.size-1 ? B.emptyIdx+1 : dx<0 && c>0 ? B.emptyIdx-1 : -1; }
+    else { target = dy>0 && r<B.size-1 ? B.emptyIdx+B.size : dy<0 && r>0 ? B.emptyIdx-B.size : -1; }
+    if (target !== -1) clickTile(target);
+}, {passive:true});
+
+// Keyboard
+window.addEventListener('keydown', e => {
+    const r=Math.floor(B.emptyIdx/B.size), c=B.emptyIdx%B.size;
+    let target=-1;
+    if (e.key==='ArrowLeft'||e.key==='a') target = c<B.size-1 ? B.emptyIdx+1 : -1;
+    if (e.key==='ArrowRight'||e.key==='d') target = c>0 ? B.emptyIdx-1 : -1;
+    if (e.key==='ArrowUp'||e.key==='w') target = r<B.size-1 ? B.emptyIdx+B.size : -1;
+    if (e.key==='ArrowDown'||e.key==='s') target = r>0 ? B.emptyIdx-B.size : -1;
+    if (target !== -1) { e.preventDefault(); clickTile(target); }
+});
+
+window.addEventListener('resize', renderBoard);
+
+// Boot
+B.best = {};
+[3,4,5].forEach(k => { try{const v=parseInt(localStorage.getItem(`entropy_best_${k}`));if(!isNaN(v))B.best[k]=v;}catch(e){} });
+setDiff(3);
+shuffleBoard();
+</script>
+</body>
+</html>
+

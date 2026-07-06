@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Decibel — Audio waveform synchronization. Clone encrypted audio patterns by modulating frequency, amplitude, and phase.">
+    <title>ICE // Decibel Audio Lock</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎵</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #030712;
+            --term-cyan: #0ea5e9;
+            --term-cyan-dim: rgba(14, 165, 233, 0.2);
+            --term-red: #ef4444;
+            --grid-bg: #0f172a;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Brutalist Corporate Styling */
+        .panel {
+            background: var(--grid-bg);
+            border: 1px solid #1e293b;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+            position: relative;
+            width: 100%;
+        }
+        
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid var(--term-cyan); border-left: 2px solid var(--term-cyan);
+        }
+
+        /* Canvas Wrapper */
+        .oscilloscope-container {
+            background: #000;
+            border: 1px solid #334155;
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: inset 0 0 30px rgba(0,0,0,1);
+        }
+
+        .oscilloscope-container::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: 
+                linear-gradient(rgba(14, 165, 233, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(14, 165, 233, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Custom Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus { outline: none; }
+        
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #1e293b;
+            border-radius: 2px;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            height: 24px;
+            width: 12px;
+            border-radius: 2px;
+            background: var(--term-cyan);
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -10px;
+            box-shadow: 0 0 10px var(--term-cyan);
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .slider-val { color: var(--term-cyan); }
+
+        /* Scanline Overlay */
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+        }
+
+        .trace-bar {
+            height: 4px;
+            background: var(--term-red);
+            width: 0%;
+            transition: width 1s linear;
+            box-shadow: 0 0 10px var(--term-red);
+        }
+        
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(3, 7, 18, 0.95); backdrop-filter: blur(8px);
+            z-index: 100; display: flex; align-items: center; justify-content: center;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <!-- Top Bar -->
+    <header class="w-full bg-[#0f172a] border-b border-cyan-900/30 p-3 sm:p-4 flex justify-between items-center z-10">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-cyan-500 tracking-widest">DECIBEL</h1>
+                <div class="text-[8px] sm:text-[10px] text-cyan-700 tracking-[0.3em]">AUDIO_LOCK // FREQ_SYNC</div>
+            </div>
+        </div>
+        <div class="text-right">
+            <div class="text-[8px] sm:text-[10px] uppercase text-slate-500 tracking-widest mb-0.5">Firewall Depth</div>
+            <div id="level-display" class="text-xl sm:text-2xl font-black text-white orbitron leading-none">01</div>
+        </div>
+    </header>
+
+    <div id="trace-container" class="w-full bg-red-950/20 h-1 z-10 hidden">
+        <div id="trace-bar" class="trace-bar"></div>
+    </div>
+
+    <!-- Main Interface -->
+    <main class="flex-1 flex flex-col p-4 sm:p-6 max-w-4xl mx-auto w-full z-10 gap-6">
+        
+        <!-- Header Info -->
+        <div class="flex justify-between items-end px-2">
+            <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-4">
+                <span>Oscilloscope Output</span>
+                <span id="match-status" class="text-red-500 animate-pulse">MISMATCH</span>
+            </div>
+            <div id="timer-display" class="text-[10px] sm:text-xs font-mono text-red-500 hidden">TRACE: 30.0s</div>
+        </div>
+
+        <!-- Oscilloscope -->
+        <div class="panel p-2 sm:p-4">
+            <div class="oscilloscope-container h-[250px] sm:h-[350px] w-full">
+                <canvas id="wave-canvas"></canvas>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="panel p-6 flex flex-col gap-6">
+            
+            <div class="space-y-6">
+                <div>
+                    <div class="slider-label"><span>Amplitude (Gain)</span><span class="slider-val" id="val-amp">50</span></div>
+                    <input type="range" id="slider-amp" min="10" max="100" value="50" oninput="window.updateWave('amp', this.value)">
+                </div>
+                
+                <div>
+                    <div class="slider-label"><span>Frequency (Hz)</span><span class="slider-val" id="val-freq">1.0</span></div>
+                    <input type="range" id="slider-freq" min="0.5" max="5.0" step="0.1" value="1.0" oninput="window.updateWave('freq', this.value)">
+                </div>
+
+                <div>
+                    <div class="slider-label"><span>Phase (Offset)</span><span class="slider-val" id="val-phase">0.0</span></div>
+                    <input type="range" id="slider-phase" min="0" max="6.28" step="0.1" value="0" oninput="window.updateWave('phase', this.value)">
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-between gap-4 mt-4 pt-6 border-t border-slate-800">
+                <button onclick="window.abortHack()" class="text-[10px] text-slate-500 hover:text-red-500 uppercase tracking-[0.5em] font-bold p-3 transition-colors border border-slate-800 rounded">
+                    Disconnect
+                </button>
+                <button onclick="window.verifySync()" id="submit-btn" class="bg-cyan-600 hover:bg-cyan-500 text-black font-black py-4 px-8 rounded uppercase tracking-widest text-sm transition-all shadow-[0_0_15px_rgba(14,165,233,0.3)]">
+                    VERIFY SYNC
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-cyan-500 mx-4 shadow-2xl shadow-cyan-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black text-cyan-500 mb-2">AUDIO LOCK PROTOCOL</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>The firewall is protected by an encrypted waveform (Red). You must manipulate your signal (Cyan) to match it perfectly before the trace completes.</p>
+                <ul class="list-disc pl-4 space-y-2">
+                    <li><b>Amplitude:</b> Adjusts the vertical height of the wave.</li>
+                    <li><b>Frequency:</b> Adjusts how tightly the wave peaks are packed.</li>
+                    <li><b>Phase:</b> Shifts the wave left and right.</li>
+                </ul>
+                <p class="text-[10px] text-slate-500 uppercase mt-4">Tolerance limits are strict. Align carefully.</p>
+            </div>
+            <button onclick="window.initDecibel()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base">INITIATE OVERRIDE</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full text-center border-t-4 mx-4 shadow-2xl" id="result-box">
+            <h2 id="result-title" class="orbitron text-2xl sm:text-3xl font-black mb-2"></h2>
+            <p id="result-sub" class="text-xs sm:text-sm mb-6 uppercase tracking-widest text-slate-400"></p>
+            <button id="result-btn" onclick="window.initDecibel()" class="w-full font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base"></button>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            let state = {
+                level: 1,
+                status: 'idle',
+                timeLeft: 0,
+                maxTime: 0,
+                timerId: null,
+                target: { amp: 50, freq: 1.0, phase: 0 },
+                user: { amp: 50, freq: 1.0, phase: 0 },
+                animFrame: null,
+                timeOffset: 0 // Used to animate the waves slightly
+            };
+
+            const canvas = document.getElementById('wave-canvas');
+            const ctx = canvas.getContext('2d');
+
+            function resizeCanvas() {
+                const container = canvas.parentElement;
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            window.abortHack = () => {
+                state.level = 1;
+                state.status = 'idle';
+                clearInterval(state.timerId);
+                cancelAnimationFrame(state.animFrame);
+                document.getElementById('result-modal').classList.add('hidden');
+                document.getElementById('intro-modal').classList.remove('hidden');
+                document.getElementById('trace-container').classList.add('hidden');
+                document.getElementById('timer-display').classList.add('hidden');
+            };
+
+            window.initDecibel = () => {
+                document.getElementById('intro-modal').classList.add('hidden');
+                document.getElementById('result-modal').classList.add('hidden');
+                
+                // Scaling Difficulty
+                state.maxTime = Math.max(15, 45 - (state.level * 3));
+                state.timeLeft = state.maxTime;
+
+                // Generate Target Wave
+                // Amp: 20 to 90
+                state.target.amp = Math.floor(Math.random() * 70) + 20;
+                // Freq: 0.5 to 4.5
+                state.target.freq = parseFloat((Math.random() * 4.0 + 0.5).toFixed(1));
+                // Phase: 0 to 6.0
+                state.target.phase = parseFloat((Math.random() * 6.0).toFixed(1));
+
+                // Reset User Wave to middle/defaults
+                state.user = { amp: 50, freq: 2.5, phase: 3.1 };
+                
+                // Update UI Sliders
+                document.getElementById('slider-amp').value = state.user.amp;
+                document.getElementById('slider-freq').value = state.user.freq;
+                document.getElementById('slider-phase').value = state.user.phase;
+                document.getElementById('val-amp').innerText = state.user.amp;
+                document.getElementById('val-freq').innerText = state.user.freq;
+                document.getElementById('val-phase').innerText = state.user.phase;
+
+                document.getElementById('level-display').innerText = state.level.toString().padStart(2, '0');
+                document.getElementById('match-status').innerText = 'MISMATCH';
+                document.getElementById('match-status').className = 'text-red-500 animate-pulse';
+
+                state.status = 'playing';
+                document.getElementById('trace-container').classList.remove('hidden');
+                document.getElementById('timer-display').classList.remove('hidden');
+                document.getElementById('trace-bar').style.width = '0%';
+                
+                startTimer();
+                if(!state.animFrame) drawWaves();
+            };
+
+            window.updateWave = (type, val) => {
+                if(state.status !== 'playing') return;
+                const numVal = parseFloat(val);
+                state.user[type] = numVal;
+                document.getElementById(`val-${type}`).innerText = numVal;
+                
+                // Live Validation Check for UI feedback
+                if (isMatched()) {
+                    document.getElementById('match-status').innerText = 'SYNCED';
+                    document.getElementById('match-status').className = 'text-emerald-400 font-black';
+                } else {
+                    document.getElementById('match-status').innerText = 'MISMATCH';
+                    document.getElementById('match-status').className = 'text-red-500 animate-pulse';
+                }
+            };
+
+            window.verifySync = () => {
+                if(state.status !== 'playing') return;
+                if(isMatched()) {
+                    endGame(true);
+                } else {
+                    // Penalty for guessing wrong
+                    state.timeLeft -= 5;
+                    window.showToast && window.showToast("SYNC FAILED -5s");
+                    // Visual shake effect
+                    const container = document.querySelector('.oscilloscope-container');
+                    container.style.transform = 'translate(5px, 5px)';
+                    setTimeout(() => container.style.transform = 'translate(-5px, -5px)', 50);
+                    setTimeout(() => container.style.transform = 'translate(0, 0)', 100);
+                }
+            };
+
+            function isMatched() {
+                // Tolerance thresholds
+                const aDiff = Math.abs(state.target.amp - state.user.amp);
+                const fDiff = Math.abs(state.target.freq - state.user.freq);
+                
+                // Phase is circular (0 and 6.28 are the same), so we need modulo diff
+                let pDiff = Math.abs(state.target.phase - state.user.phase);
+                pDiff = Math.min(pDiff, (Math.PI * 2) - pDiff);
+
+                return (aDiff <= 5 && fDiff <= 0.2 && pDiff <= 0.4);
+            }
+
+            function drawWaves() {
+                if(state.status !== 'playing') {
+                    state.animFrame = requestAnimationFrame(drawWaves);
+                    return;
+                }
+
+                resizeCanvas();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const centerY = canvas.height / 2;
+                state.timeOffset += 0.05; // Constant scroll effect
+
+                // Draw Target Wave (Red, slightly dashed or darker)
+                ctx.beginPath();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ef4444';
+                
+                for(let x = 0; x < canvas.width; x++) {
+                    // Normalizing X to create a visible wave frequency
+                    const normalizedX = x * 0.02;
+                    const y = centerY + Math.sin(normalizedX * state.target.freq + state.target.phase + state.timeOffset) * (state.target.amp * (canvas.height/250));
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // Draw User Wave (Cyan, bright)
+                ctx.beginPath();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#0ea5e9';
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#0ea5e9';
+
+                for(let x = 0; x < canvas.width; x++) {
+                    const normalizedX = x * 0.02;
+                    const y = centerY + Math.sin(normalizedX * state.user.freq + state.user.phase + state.timeOffset) * (state.user.amp * (canvas.height/250));
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                state.animFrame = requestAnimationFrame(drawWaves);
+            }
+
+            function startTimer() {
+                clearInterval(state.timerId);
+                state.timerId = setInterval(() => {
+                    if(state.status !== 'playing') {
+                        clearInterval(state.timerId);
+                        return;
+                    }
+                    state.timeLeft -= 0.1;
+                    
+                    const percent = ((state.maxTime - state.timeLeft) / state.maxTime) * 100;
+                    document.getElementById('trace-bar').style.width = `${Math.min(100, Math.max(0, percent))}%`;
+                    document.getElementById('timer-display').innerText = `TRACE: ${Math.max(0, state.timeLeft).toFixed(1)}s`;
+
+                    if(state.timeLeft <= 0) {
+                        clearInterval(state.timerId);
+                        endGame(false);
+                    }
+                }, 100);
+            }
+
+            function endGame(isWin) {
+                state.status = 'over';
+                clearInterval(state.timerId);
+                
+                setTimeout(() => {
+                    const mod = document.getElementById('result-modal');
+                    const box = document.getElementById('result-box');
+                    const title = document.getElementById('result-title');
+                    const sub = document.getElementById('result-sub');
+                    const btn = document.getElementById('result-btn');
+
+                    mod.classList.remove('hidden');
+
+                    if(isWin) {
+                        box.style.borderColor = '#0ea5e9';
+                        box.style.boxShadow = '0 0 50px rgba(14, 165, 233, 0.2)';
+                        title.innerText = "FREQUENCY SYNCED";
+                        title.style.color = '#0ea5e9';
+                        sub.innerText = `Port unlocked with ${state.timeLeft.toFixed(1)}s remaining.`;
+                        
+                        btn.innerText = "PROCEED TO NEXT PORT";
+                        btn.className = "w-full bg-cyan-600 hover:bg-cyan-500 text-black font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                        
+                        state.level++;
+                    } else {
+                        box.style.borderColor = '#ef4444';
+                        box.style.boxShadow = '0 0 50px rgba(239, 68, 68, 0.2)';
+                        title.innerText = "CONNECTION TRACED";
+                        title.style.color = '#ef4444';
+                        sub.innerText = "Time expired. The system blocked your IP.";
+                        
+                        btn.innerText = "REBOOT CONNECTION";
+                        btn.className = "w-full bg-red-900 hover:bg-red-800 text-white font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                        
+                        state.level = 1;
+                    }
+                }, 400);
+            }
+
+            // Start animation loop initially (idle state)
+            drawWaves();
+
+        })();
+    </script>
+</body>
+</html>

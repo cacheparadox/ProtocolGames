@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Blackout — Memory sequence challenge. Watch the glyph grid flash, then reproduce the sequence exactly.">
+    <title>ICE // Blackout Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --bg:#03071a; --accent:#0ea5e9; --accent-dim:rgba(14,165,233,0.15); --red:#ef4444; --grid-bg:#060c1e; }
+        body { background:var(--bg); color:#d1d5db; font-family:'JetBrains Mono',monospace; margin:0; overflow:hidden; user-select:none; -webkit-tap-highlight-color:transparent; }
+        .orbitron { font-family:'Orbitron',sans-serif; }
+        .panel { background:var(--grid-bg); border:1px solid #0c1a3a; box-shadow:4px 4px 0 rgba(0,0,0,0.8); position:relative; }
+        .panel::before { content:''; position:absolute; top:0; left:0; width:10px; height:10px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+        .crt-overlay { position:fixed;inset:0;pointer-events:none;z-index:50;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.2) 50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.04));background-size:100% 2px,3px 100%; }
+        .modal-overlay { position:fixed;inset:0;background:rgba(3,7,26,0.97);backdrop-filter:blur(8px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+        .hidden { display:none!important; }
+
+        #game-grid {
+            display: grid;
+            gap: clamp(6px, 1.5vw, 10px);
+            padding: clamp(12px, 2vw, 20px);
+            background: #000;
+            border: 1px solid rgba(14,165,233,0.2);
+            border-radius: 12px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8), 0 0 30px rgba(14,165,233,0.05);
+        }
+
+        .glyph-cell {
+            aspect-ratio: 1;
+            background: #060c1e;
+            border: 1px solid #0c1a3a;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: clamp(1rem, 3vw, 1.6rem);
+            cursor: pointer;
+            transition: all 0.12s;
+            position: relative;
+            overflow: hidden;
+        }
+        .glyph-cell:active { transform: scale(0.92); }
+
+        .glyph-cell.flashing {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+            box-shadow: 0 0 25px rgba(14,165,233,0.5), inset 0 0 15px rgba(14,165,233,0.2);
+            animation: flash-pulse 0.15s ease;
+        }
+        .glyph-cell.correct-tap {
+            background: rgba(16,185,129,0.2);
+            border-color: #10b981;
+            box-shadow: 0 0 20px rgba(16,185,129,0.4);
+        }
+        .glyph-cell.wrong-tap {
+            background: rgba(239,68,68,0.2);
+            border-color: var(--red);
+            box-shadow: 0 0 20px rgba(239,68,68,0.4);
+            animation: shake 0.3s;
+        }
+        .glyph-cell.numbered::after {
+            content: attr(data-seq);
+            position: absolute;
+            top: 2px; right: 4px;
+            font-size: 9px;
+            color: var(--accent);
+            font-weight: 900;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        @keyframes flash-pulse { 0%{transform:scale(1)} 50%{transform:scale(1.06)} 100%{transform:scale(1)} }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+
+        .phase-badge {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+        .phase-watch { background: rgba(14,165,233,0.1); color: var(--accent); border: 1px solid var(--accent); }
+        .phase-input { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid #10b981; }
+        .phase-wait { background: rgba(234,179,8,0.1); color: #eab308; border: 1px solid #eab308; }
+
+        .progress-pip { width: 10px; height: 10px; border-radius: 2px; transition: all 0.2s; }
+        .pip-done { background: #10b981; box-shadow: 0 0 6px #10b981; }
+        .pip-active { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pip-pulse 0.8s infinite alternate; }
+        .pip-pending { background: #1e3a5f; }
+        @keyframes pip-pulse { from{opacity:0.5} to{opacity:1} }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen" style="height:100dvh; overflow:hidden;">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full border-b border-cyan-900/30 p-3 sm:p-4 flex justify-between items-center z-10 flex-shrink-0" style="background:#060c1e">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-cyan-500 tracking-widest">BLACKOUT</h1>
+                <div class="text-[8px] sm:text-[10px] text-cyan-800 tracking-[0.3em]">MEMORY_BREACH // SEQ_CLONE</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="text-center">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Round</div>
+                <div id="round-display" class="text-2xl font-black text-white orbitron">01</div>
+            </div>
+            <div class="text-center">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Best</div>
+                <div id="best-display" class="text-2xl font-black text-cyan-400 orbitron">00</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center justify-center gap-4 p-4 overflow-hidden">
+
+        <!-- Phase + Progress -->
+        <div class="flex flex-col items-center gap-3 w-full max-w-sm">
+            <div id="phase-badge" class="phase-badge phase-wait">INITIALIZING...</div>
+            <div id="seq-progress" class="flex gap-1.5 flex-wrap justify-center"></div>
+        </div>
+
+        <!-- Grid -->
+        <div id="game-grid" class="w-full" style="max-width: min(420px, 90vw); max-height: min(420px, 55vh);"></div>
+
+        <!-- Hint line -->
+        <div id="hint-line" class="text-[10px] text-slate-600 orbitron tracking-widest text-center">WATCH THE SEQUENCE</div>
+
+        <!-- Start button (shown before game starts) -->
+        <button id="start-btn" onclick="startRound()" class="orbitron font-black text-sm tracking-widest text-black px-10 py-4 rounded-lg" style="background:#0ea5e9;box-shadow:0 0 20px rgba(14,165,233,0.4)">
+            INITIALIZE SEQUENCE
+        </button>
+
+    </main>
+
+    <!-- Game over modal -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div class="text-5xl mb-4">💀</div>
+            <h2 class="orbitron text-2xl font-black text-red-400 mb-2">BLACKOUT</h2>
+            <p id="go-sub" class="text-[11px] text-slate-400 mb-2 tracking-widest"></p>
+            <p id="go-best" class="text-[10px] text-cyan-400 mb-8 tracking-widest"></p>
+            <button onclick="restartGame()" class="w-full py-3 orbitron font-black text-xs tracking-widest text-black rounded" style="background:#0ea5e9">REBOOT SEQUENCE</button>
+        </div>
+    </div>
+
+<script>
+const GLYPHS = ['⬡','◈','◉','▲','✦','❋','⬟','◆','⬢','✸','❖','◇','△','✦','⬡','◈'];
+const GRID_SIZE = 4;
+
+let S = {
+    round: 0,
+    sequence: [],
+    inputIdx: 0,
+    phase: 'idle', // idle, show, input
+    best: parseInt(localStorage.getItem('blackout_best') || '0'),
+    cells: [],
+    showTimer: null,
+};
+
+document.getElementById('best-display').textContent = String(S.best).padStart(2,'0');
+
+function buildGrid() {
+    const grid = document.getElementById('game-grid');
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+    S.cells = [];
+    for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'glyph-cell';
+        cell.innerHTML = GLYPHS[i % GLYPHS.length];
+        cell.dataset.idx = i;
+        cell.onclick = () => handleTap(i);
+        grid.appendChild(cell);
+        S.cells.push(cell);
+    }
+}
+
+function startRound() {
+    document.getElementById('start-btn').classList.add('hidden');
+    S.round = 0;
+    S.sequence = [];
+    nextRound();
+}
+
+function nextRound() {
+    S.round++;
+    S.inputIdx = 0;
+    document.getElementById('round-display').textContent = String(S.round).padStart(2,'0');
+
+    // Add one more random cell to sequence
+    S.sequence.push(Math.floor(Math.random() * GRID_SIZE * GRID_SIZE));
+    renderProgress();
+    showSequence();
+}
+
+function renderProgress() {
+    const el = document.getElementById('seq-progress');
+    el.innerHTML = '';
+    S.sequence.forEach((_, i) => {
+        const pip = document.createElement('div');
+        pip.className = 'progress-pip pip-pending';
+        pip.id = `pip-${i}`;
+        el.appendChild(pip);
+    });
+}
+
+function showSequence() {
+    S.phase = 'show';
+    document.getElementById('phase-badge').className = 'phase-badge phase-watch';
+    document.getElementById('phase-badge').textContent = `WATCH — ${S.sequence.length} NODES`;
+    document.getElementById('hint-line').textContent = 'MEMORIZE THE SEQUENCE';
+    setCellsInteractive(false);
+
+    let i = 0;
+    function flashNext() {
+        if (i >= S.sequence.length) {
+            setTimeout(startInput, 600);
+            return;
+        }
+        // Pip update
+        if (i > 0) document.getElementById(`pip-${i-1}`).className = 'progress-pip pip-done';
+        document.getElementById(`pip-${i}`).className = 'progress-pip pip-active';
+
+        const cell = S.cells[S.sequence[i]];
+        cell.classList.add('flashing');
+        cell.dataset.seq = i + 1;
+        cell.classList.add('numbered');
+        setTimeout(() => {
+            cell.classList.remove('flashing', 'numbered');
+            delete cell.dataset.seq;
+            i++;
+            setTimeout(flashNext, 300);
+        }, Math.max(200, 600 - S.round * 15));
+    }
+    setTimeout(flashNext, 400);
+}
+
+function startInput() {
+    S.phase = 'input';
+    S.inputIdx = 0;
+    document.getElementById('phase-badge').className = 'phase-badge phase-input';
+    document.getElementById('phase-badge').textContent = `REPRODUCE — TAP ${S.sequence.length} NODES`;
+    document.getElementById('hint-line').textContent = `${S.sequence.length - S.inputIdx} NODES REMAINING`;
+    // Reset all pips
+    S.sequence.forEach((_,i) => document.getElementById(`pip-${i}`).className = 'progress-pip pip-pending');
+    setCellsInteractive(true);
+}
+
+function handleTap(idx) {
+    if (S.phase !== 'input') return;
+    const correct = S.sequence[S.inputIdx];
+    const cell = S.cells[idx];
+
+    if (idx === correct) {
+        cell.classList.add('correct-tap');
+        document.getElementById(`pip-${S.inputIdx}`).className = 'progress-pip pip-done';
+        setTimeout(() => cell.classList.remove('correct-tap'), 300);
+        S.inputIdx++;
+        document.getElementById('hint-line').textContent = `${S.sequence.length - S.inputIdx} NODES REMAINING`;
+        if (S.inputIdx >= S.sequence.length) {
+            setCellsInteractive(false);
+            setTimeout(nextRound, 600);
+        }
+    } else {
+        cell.classList.add('wrong-tap');
+        setTimeout(() => cell.classList.remove('wrong-tap'), 300);
+        gameOver();
+    }
+}
+
+function gameOver() {
+    S.phase = 'idle';
+    setCellsInteractive(false);
+    if (S.round > S.best) {
+        S.best = S.round;
+        localStorage.setItem('blackout_best', S.best);
+        document.getElementById('best-display').textContent = String(S.best).padStart(2,'0');
+    }
+    document.getElementById('go-sub').textContent = `SEQUENCE BROKEN AT ROUND ${S.round}`;
+    document.getElementById('go-best').textContent = `PERSONAL BEST: ${S.best} ROUNDS`;
+    document.getElementById('gameover-modal').classList.remove('hidden');
+}
+
+function setCellsInteractive(on) {
+    S.cells.forEach(c => c.style.pointerEvents = on ? 'auto' : 'none');
+}
+
+window.restartGame = function() {
+    document.getElementById('gameover-modal').classList.add('hidden');
+    S.round = 0; S.sequence = [];
+    document.getElementById('round-display').textContent = '01';
+    document.getElementById('phase-badge').className = 'phase-badge phase-wait';
+    document.getElementById('phase-badge').textContent = 'READY';
+    document.getElementById('hint-line').textContent = 'WATCH THE SEQUENCE';
+    document.getElementById('seq-progress').innerHTML = '';
+    document.getElementById('start-btn').classList.remove('hidden');
+    setCellsInteractive(false);
+};
+
+window.startRound = startRound;
+
+buildGrid();
+</script>
+</body>
+</html>
+

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Breach — Binary Mastermind. Crack the 8-bit password using bit-position feedback across 6 attempts.">
+    <title>ICE // Breach Binary</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💻</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --bg:#020d06; --accent:#10b981; --accent-dim:rgba(16,185,129,0.1); --red:#ef4444; --amber:#f59e0b; --grid-bg:#070f08; }
+        body { background:var(--bg); color:#d1d5db; font-family:'JetBrains Mono',monospace; margin:0; overflow-x:hidden; user-select:none; -webkit-tap-highlight-color:transparent; min-height:100vh; }
+        .orbitron { font-family:'Orbitron',sans-serif; }
+        .panel { background:var(--grid-bg); border:1px solid #1a2e1a; box-shadow:4px 4px 0 rgba(0,0,0,0.8); position:relative; }
+        .panel::before { content:''; position:absolute; top:0; left:0; width:10px; height:10px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+        .crt-overlay { position:fixed;inset:0;pointer-events:none;z-index:50;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.2) 50%),linear-gradient(90deg,rgba(255,0,0,0.04),rgba(0,255,0,0.01),rgba(0,0,255,0.04));background-size:100% 2px,3px 100%; }
+        .modal-overlay { position:fixed;inset:0;background:rgba(2,13,6,0.97);backdrop-filter:blur(8px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+        .hidden { display:none!important; }
+
+        /* Bit toggle */
+        .bit-btn {
+            width: clamp(40px, 9vw, 60px);
+            height: clamp(40px, 9vw, 60px);
+            font-size: clamp(1.1rem, 3vw, 1.6rem);
+            font-weight: 900;
+            font-family: 'Orbitron', sans-serif;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.12s;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid;
+        }
+        .bit-0 { background: #050d05; border-color: #1a2e1a; color: #1a3a1a; }
+        .bit-1 { background: rgba(16,185,129,0.2); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(16,185,129,0.3); text-shadow: 0 0 8px var(--accent); }
+        .bit-btn:active { transform: scale(0.88); }
+
+        /* History row */
+        .hist-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px;
+            border: 1px solid #1a2e1a;
+            background: #040d04;
+            border-radius: 6px;
+        }
+        .hist-bit {
+            width: clamp(28px, 6vw, 38px);
+            height: clamp(28px, 6vw, 38px);
+            font-size: clamp(0.8rem, 2.5vw, 1.1rem);
+            font-weight: 900;
+            font-family: 'Orbitron', sans-serif;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 4px;
+            border: 1px solid;
+        }
+        .hb-correct { background: rgba(16,185,129,0.2); border-color: var(--accent); color: var(--accent); text-shadow: 0 0 6px var(--accent); }
+        .hb-wrong { background: rgba(239,68,68,0.1); border-color: #3a1a1a; color: #ef4444; }
+        .hb-empty { background: #050d05; border-color: #1a2e1a; color: #1e3a1e; }
+
+        .feedback-bar {
+            display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+            padding-left: 4px;
+        }
+        .fb-exact { width:10px; height:10px; border-radius:2px; background:var(--accent); box-shadow:0 0 6px var(--accent); }
+        .fb-none  { width:10px; height:10px; border-radius:2px; background:#1a2e1a; }
+
+        .submit-btn {
+            background: var(--accent);
+            color: black;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 12px;
+            letter-spacing: 3px;
+            padding: 14px 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            box-shadow: 0 0 20px rgba(16,185,129,0.3);
+        }
+        .submit-btn:hover { box-shadow: 0 0 30px rgba(16,185,129,0.5); transform: translateY(-1px); }
+        .submit-btn:active { transform: scale(0.96); }
+        .submit-btn:disabled { opacity: 0.3; pointer-events: none; }
+
+        .attempt-pip { width:12px; height:12px; border-radius:2px; }
+        .ap-used { background:#1e3a1e; }
+        .ap-left { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full bg-[#040d04] border-b border-emerald-900/30 p-3 sm:p-4 flex justify-between items-center z-10">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-emerald-400 tracking-widest">BINARY<span class="text-white">BREACH</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-emerald-800 tracking-[0.3em]">8-BIT // MASTERMIND</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Attempts</div>
+                <div class="flex gap-1 justify-end mt-1" id="attempt-pips"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col gap-4 p-3 sm:p-5 max-w-lg mx-auto w-full z-10">
+
+        <!-- Instructions -->
+        <div class="panel p-3 text-[10px] text-slate-500 leading-relaxed">
+            <span class="text-emerald-400 font-bold">HOW TO PLAY:</span> Guess the secret 8-bit password. Green pip = correct bit in correct position. Dark pip = wrong. You have 6 attempts.
+        </div>
+
+        <!-- History -->
+        <div class="panel p-4 flex-1 flex flex-col gap-2 min-h-[240px]">
+            <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">// ATTEMPT LOG</div>
+            <div id="history-list" class="flex flex-col gap-2"></div>
+        </div>
+
+        <!-- Current input -->
+        <div class="panel p-4">
+            <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-3">// CURRENT GUESS</div>
+            <div class="flex gap-2 justify-center mb-4" id="bit-row">
+                <!-- 8 bits rendered by JS -->
+            </div>
+            <div class="flex justify-between items-center">
+                <button onclick="randomize()" class="text-[10px] text-slate-500 hover:text-white border border-slate-700 px-3 py-2 rounded orbitron transition-colors">RANDOM</button>
+                <button class="submit-btn" onclick="submitGuess()">UPLOAD_</button>
+                <button onclick="clearGuess()" class="text-[10px] text-slate-400 hover:text-red-400 border border-slate-700 px-3 py-2 rounded orbitron transition-colors">CLEAR</button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Result Modal -->
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div id="res-icon" class="text-5xl mb-4">🔓</div>
+            <h2 id="res-title" class="orbitron text-2xl font-black mb-2 text-emerald-400">ACCESS GRANTED</h2>
+            <p id="res-sub" class="text-[11px] text-slate-400 mb-4 tracking-widest"></p>
+            <div class="bg-black/50 border border-emerald-900/50 rounded p-4 mb-6">
+                <div class="text-[9px] text-slate-500 mb-2 orbitron tracking-widest">THE PASSWORD WAS</div>
+                <div id="res-password" class="text-2xl font-black orbitron tracking-widest text-emerald-400"></div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="newGame()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-black rounded bg-emerald-500">NEW TARGET</button>
+                <button onclick="document.getElementById('result-modal').classList.add('hidden')" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-slate-400 bg-black border border-slate-700 rounded hover:text-white">REVIEW</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+const MAX_ATTEMPTS = 6;
+const BITS = 8;
+let target = [];
+let guess = [];
+let attempts = 0;
+let gameOver = false;
+
+function genTarget() {
+    target = Array.from({length: BITS}, () => Math.random() < 0.5 ? 0 : 1);
+}
+
+function renderBitRow() {
+    const row = document.getElementById('bit-row');
+    row.innerHTML = '';
+    for (let i = 0; i < BITS; i++) {
+        const btn = document.createElement('div');
+        btn.className = `bit-btn bit-${guess[i]}`;
+        btn.textContent = guess[i];
+        btn.dataset.idx = i;
+        btn.onclick = () => toggleBit(i);
+        row.appendChild(btn);
+    }
+}
+
+function toggleBit(i) {
+    if (gameOver) return;
+    guess[i] = 1 - guess[i];
+    renderBitRow();
+}
+
+function clearGuess() {
+    guess = Array(BITS).fill(0);
+    renderBitRow();
+}
+
+function randomize() {
+    guess = Array.from({length: BITS}, () => Math.round(Math.random()));
+    renderBitRow();
+}
+
+function renderAttemptPips() {
+    const el = document.getElementById('attempt-pips');
+    el.innerHTML = '';
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        const pip = document.createElement('div');
+        pip.className = 'attempt-pip ' + (i < attempts ? 'ap-used' : 'ap-left');
+        el.appendChild(pip);
+    }
+}
+
+function submitGuess() {
+    if (gameOver) return;
+    const correct = guess.filter((b, i) => b === target[i]).length;
+    const wrong = BITS - correct;
+    addHistoryRow(guess.slice(), correct);
+    attempts++;
+    renderAttemptPips();
+
+    if (correct === BITS) { endGame(true); return; }
+    if (attempts >= MAX_ATTEMPTS) { endGame(false); return; }
+}
+
+function addHistoryRow(g, correct) {
+    const list = document.getElementById('history-list');
+    const row = document.createElement('div');
+    row.className = 'hist-row';
+
+    // Attempt number
+    const num = document.createElement('div');
+    num.className = 'text-[9px] text-slate-600 orbitron w-4 text-right flex-shrink-0';
+    num.textContent = attempts + 1;
+    row.appendChild(num);
+
+    // Bits
+    for (let i = 0; i < BITS; i++) {
+        const b = document.createElement('div');
+        const isCorrect = g[i] === target[i];
+        b.className = 'hist-bit ' + (isCorrect ? 'hb-correct' : 'hb-wrong');
+        b.textContent = g[i];
+        row.appendChild(b);
+    }
+
+    // Feedback
+    const fb = document.createElement('div');
+    fb.className = 'feedback-bar ml-auto';
+    for (let i = 0; i < BITS; i++) {
+        const pip = document.createElement('div');
+        pip.className = g[i] === target[i] ? 'fb-exact' : 'fb-none';
+        fb.appendChild(pip);
+    }
+    // Score label
+    const sc = document.createElement('div');
+    sc.className = 'text-[9px] orbitron font-black ml-1';
+    sc.style.color = correct === BITS ? '#10b981' : correct >= 5 ? '#f59e0b' : '#64748b';
+    sc.textContent = `${correct}/${BITS}`;
+    fb.appendChild(sc);
+    row.appendChild(fb);
+
+    list.appendChild(row);
+    list.scrollTop = list.scrollHeight;
+}
+
+function endGame(win) {
+    gameOver = true;
+    const modal = document.getElementById('result-modal');
+    document.getElementById('res-icon').textContent = win ? '🔓' : '🔒';
+    document.getElementById('res-title').textContent = win ? 'ACCESS GRANTED' : 'LOCKOUT';
+    document.getElementById('res-title').style.color = win ? '#10b981' : '#ef4444';
+    document.getElementById('res-sub').textContent = win
+        ? `CRACKED IN ${attempts} ATTEMPT${attempts > 1 ? 'S' : ''}`
+        : `${MAX_ATTEMPTS} ATTEMPTS EXHAUSTED`;
+    document.getElementById('res-password').textContent = target.join(' ');
+    modal.classList.remove('hidden');
+}
+
+function newGame() {
+    document.getElementById('result-modal').classList.add('hidden');
+    document.getElementById('history-list').innerHTML = '';
+    attempts = 0;
+    gameOver = false;
+    guess = Array(BITS).fill(0);
+    genTarget();
+    renderBitRow();
+    renderAttemptPips();
+}
+
+window.newGame = newGame;
+window.submitGuess = submitGuess;
+window.clearGuess = clearGuess;
+window.randomize = randomize;
+
+// Boot
+newGame();
+</script>
+</body>
+</html>
+

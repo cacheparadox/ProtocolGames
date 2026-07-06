@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Double Dare You</title>
+    <!-- Favicon (Tab Icon) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <script src="../cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        @import url('../fonts.googleapis.com/css2@family=Bungee&family=Lexend%253Awght@400%3B700%3B900&family=Kalam%253Awght@400%3B700&display=swap.css');
+        
+        :root {
+            --bg-dark: #02040a; 
+            --accent-yellow: #fbbf24;
+            --accent-rose: #e11d48;
+            --glass: rgba(15, 23, 42, 0.85);
+        }
+
+        body {
+            font-family: 'Lexend', sans-serif;
+            background-color: var(--bg-dark);
+            color: #f8fafc;
+            overflow-x: hidden;
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .heading-font { font-family: 'Bungee', cursive; }
+        .handwritten { font-family: 'Kalam', cursive; }
+
+        .bg-midnight {
+            background: radial-gradient(circle at center, #111827 0%, #02040a 100%);
+        }
+
+        .glass-panel {
+            background: var(--glass);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 1);
+        }
+
+        .card-inner-shadow {
+            box-shadow: inset 0 2px 10px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        .timer-bar { transition: width 0.1s linear; }
+
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.7; }
+        }
+
+        .pulse-active { animation: pulse-glow 2s infinite; }
+
+        .animate-pop { animation: slide-up 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes slide-up {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .online { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+        .offline { background-color: #ef4444; }
+
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        input::placeholder { color: #334155; font-weight: 400; }
+        .btn-disabled { opacity: 0.2; cursor: not-allowed; filter: grayscale(1); }
+        
+        .passed-player { opacity: 0.3; filter: grayscale(1); }
+
+        /* Auto-scaling text utility */
+        .fit-text {
+            white-space: nowrap;
+            display: inline-block;
+            transform-origin: left center;
+        }
+
+        /* Toast notifications */
+        #toast-container {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(15, 23, 42, 0.95);
+            border-left: 5px solid var(--accent-yellow);
+            color: white;
+            padding: 1rem 1.25rem;
+            border-radius: 1.25rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            min-width: 260px;
+            max-width: 380px;
+            animation: toast-in 0.5s ease forwards;
+            backdrop-filter: blur(12px);
+            pointer-events: auto;
+        }
+
+        @keyframes toast-in {
+            from { transform: translateX(120%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .toast-exit {
+            animation: toast-out 0.5s ease forwards;
+        }
+
+        @keyframes toast-out {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(120%); opacity: 0; }
+        }
+
+        /* Fix Room ID obstruction on mobile */
+        @media (max-width: 640px) {
+            #room-pin {
+                top: auto;
+                bottom: 1rem;
+                left: 1rem;
+                right: auto;
+            }
+        }
+    </style>
+</head>
+<body class="bg-midnight p-4 md:p-8">
+
+    <div id="toast-container"></div>
+
+    <div id="app" class="w-full max-w-2xl mx-auto relative z-10">
+        <!-- Room Code Pin -->
+        <div id="room-pin" class="hidden fixed top-4 right-4 z-50">
+            <div class="bg-slate-900/95 border border-white/10 px-3 py-1.5 rounded-xl flex gap-2 items-center backdrop-blur-md shadow-2xl">
+                <span class="text-[8px] font-black text-slate-500 uppercase tracking-widest">ROOM</span>
+                <span class="heading-font text-yellow-400 text-sm" id="pin-code">----</span>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="text-center py-24">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-yellow-400 mb-6"></div>
+            <p class="heading-font text-yellow-500 tracking-[0.4em] text-xs uppercase animate-pulse">Syncing Servers...</p>
+        </div>
+
+        <!-- Entry Screen -->
+        <div id="auth-screen" class="hidden space-y-8 animate-pop">
+            <div class="text-center mb-6">
+                <h1 class="heading-font text-5xl md:text-7xl text-white tracking-tighter drop-shadow-2xl leading-none">DOUBLE<br><span class="text-yellow-400">DARE</span> YOU</h1>
+            </div>
+            
+            <div class="glass-panel p-8 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem]">
+                <div class="mb-10">
+                    <label class="block text-[10px] font-black mb-4 text-slate-500 uppercase tracking-[0.5em]">WHO ARE YOU?</label>
+                    <input type="text" id="username-input" placeholder="Enter name..." 
+                        class="w-full bg-black/60 border border-slate-800 rounded-2xl px-6 py-5 text-white font-bold focus:border-yellow-500 outline-none transition-all text-xl md:text-2xl">
+                </div>
+                <div class="space-y-4">
+                    <button onclick="createNewGame()" class="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-black py-6 rounded-[2rem] transition-all heading-font text-2xl md:text-3xl shadow-2xl active:scale-95">
+                        HOST GAME
+                    </button>
+                    <div class="flex items-center gap-6 py-4">
+                        <div class="flex-grow border-t border-white/5"></div>
+                        <span class="text-[10px] text-slate-700 font-black uppercase">OR JOIN</span>
+                        <div class="flex-grow border-t border-white/5"></div>
+                    </div>
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <input type="text" id="game-code-input" placeholder="CODE" 
+                            class="md:w-1/3 bg-black/60 border border-slate-800 rounded-2xl px-2 py-5 text-white uppercase font-black text-center focus:border-indigo-500 outline-none text-2xl">
+                        <button onclick="joinGame()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-black py-5 rounded-[2rem] transition-all heading-font shadow-2xl active:scale-95 text-2xl">
+                            JOIN
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="openTutorial()" class="w-full text-slate-600 hover:text-slate-300 transition-colors flex items-center justify-center gap-4 font-bold py-4 handwritten text-3xl">
+                <i class="fas fa-question text-yellow-400/30 text-2xl"></i> Rules
+            </button>
+        </div>
+
+        <!-- Lobby Screen -->
+        <div id="lobby-screen" class="hidden space-y-8 animate-pop">
+            <div class="glass-panel p-10 md:p-12 rounded-[2.5rem] text-center">
+                <h2 class="text-slate-500 uppercase tracking-[0.6em] text-[10px] font-black mb-4">INVITE CODE</h2>
+                <div id="display-game-code" class="heading-font text-7xl md:text-9xl text-white tracking-widest drop-shadow-2xl">----</div>
+            </div>
+
+            <div class="glass-panel p-8 md:p-10 rounded-[2.5rem] md:rounded-[3.5rem]">
+                <h3 class="text-[10px] font-black text-slate-600 mb-8 uppercase tracking-[0.5em] flex justify-between items-center">
+                    THE SQUAD <span id="player-count" class="bg-indigo-900/50 px-4 py-1 rounded-full text-indigo-400 font-bold">0</span>
+                </h3>
+                <ul id="player-list" class="space-y-4 max-h-[30vh] overflow-y-auto scrollbar-hide"></ul>
+            </div>
+
+            <button id="start-game-btn" onclick="startGame()" class="w-full hidden bg-indigo-600 hover:bg-indigo-500 text-white font-black py-7 rounded-[2rem] heading-font text-2xl md:text-4xl shadow-2xl transition-all active:scale-95">
+                START CHAOS
+            </button>
+            <div id="wait-message" class="text-center p-8 glass-panel rounded-[2rem]">
+                <p class="text-slate-500 italic handwritten text-2xl">Wait for the Host to initiate...</p>
+            </div>
+        </div>
+
+        <!-- Game Area -->
+        <div id="game-screen" class="hidden space-y-6 animate-pop">
+            <div id="scores-strip" class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-2"></div>
+
+            <div id="game-card" class="glass-panel rounded-[3rem] md:rounded-[4rem] p-8 md:p-12 min-h-[350px] md:min-h-[460px] flex flex-col justify-between relative overflow-hidden border border-white/5">
+                <div class="absolute top-0 right-0 bg-yellow-400 text-black font-black px-8 md:px-12 py-4 md:py-6 rounded-bl-[2.5rem] md:rounded-bl-[3.5rem] heading-font text-lg md:text-2xl z-20 shadow-2xl" id="card-points">5 PTS</div>
+                
+                <div class="mt-8 md:mt-12 relative z-10 overflow-hidden" id="category-container">
+                    <p id="card-category" class="fit-text text-6xl font-black leading-none text-white drop-shadow-2xl tracking-tighter">
+                        Name <span class="text-yellow-400 underline decoration-indigo-600 decoration-[12px] underline-offset-8">Countries</span>
+                    </p>
+                </div>
+
+                <div class="flex items-end justify-between relative z-10 mt-6">
+                    <div class="bg-black/80 p-6 md:p-8 rounded-[2rem] border border-white/5 shadow-inner">
+                        <p class="text-[8px] md:text-[10px] uppercase font-black tracking-[0.6em] text-slate-600 mb-2">TIMER</p>
+                        <p id="card-time" class="heading-font text-3xl md:text-5xl text-yellow-400">15s</p>
+                    </div>
+                    <div id="timer-display" class="hidden">
+                        <div class="text-[8rem] md:text-[12rem] heading-font text-white drop-shadow-2xl leading-none" id="countdown-num">15</div>
+                    </div>
+                </div>
+                
+                <div id="timer-container" class="absolute bottom-0 left-0 w-full h-4 md:h-6 bg-black/60 hidden">
+                    <div id="timer-progress" class="h-full bg-yellow-400 timer-bar" style="width: 100%"></div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div id="action-area" class="glass-panel p-8 md:p-12 rounded-[3rem] md:rounded-[4.5rem]">
+                <div id="phase-bidding" class="hidden space-y-8 md:space-y-12 text-center">
+                    <div>
+                        <p class="text-[10px] font-black text-slate-600 uppercase tracking-[0.5em] mb-4">CURRENT BID</p>
+                        <div class="flex justify-center items-center gap-6 md:gap-10">
+                            <span class="heading-font text-7xl md:text-[10rem] text-yellow-400 leading-none drop-shadow-2xl" id="current-bid-value">0</span>
+                            <div class="text-left">
+                                <p class="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em]">OWNED BY</p>
+                                <p class="font-black text-white text-3xl md:text-5xl leading-none truncate max-w-[150px] md:max-w-[250px]" id="current-bidder">None</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="bid-controls" class="space-y-6 md:space-y-10">
+                        <div class="flex gap-4 md:gap-8">
+                            <button onclick="changeBid(-1)" class="w-1/4 bg-slate-900/90 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] text-3xl md:text-5xl hover:bg-slate-800 active:scale-90 transition-all border border-white/10 shadow-xl"><i class="fas fa-minus"></i></button>
+                            <div id="my-potential-bid" class="w-2/4 bg-black/90 rounded-[2rem] md:rounded-[2.5rem] flex items-center justify-center font-black text-6xl md:text-8xl border-4 border-yellow-400 text-yellow-400 shadow-inner">1</div>
+                            <button onclick="changeBid(1)" class="w-1/4 bg-slate-900/90 p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] text-3xl md:text-5xl hover:bg-slate-800 active:scale-90 transition-all border border-white/10 shadow-xl"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <button onclick="placeBid()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-6 md:py-10 rounded-[2rem] md:rounded-[3rem] font-black heading-font text-2xl md:text-4xl shadow-2xl active:scale-95 transition-all uppercase tracking-tight">I Can Do More</button>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <button onclick="callBetchaCant()" class="border-2 border-rose-600 text-rose-500 py-6 rounded-[2rem] font-black text-lg md:text-2xl hover:bg-rose-600 hover:text-white transition-all uppercase tracking-widest leading-none">BETCHA CAN'T!</button>
+                            <button onclick="passTurn()" id="pass-btn" class="border-2 border-slate-600 text-slate-400 py-6 rounded-[2rem] font-black text-lg md:text-2xl hover:bg-slate-700 hover:text-white transition-all uppercase tracking-widest">PASS</button>
+                        </div>
+                        
+                        <button onclick="voteToSkip()" class="w-full border-2 border-slate-700 text-slate-500 py-4 rounded-[2rem] flex items-center justify-center gap-4 hover:bg-slate-800 transition-colors">
+                            <span class="text-[9px] font-black uppercase tracking-widest">SKIP CATEGORY</span>
+                            <div id="skip-count" class="text-xs font-black bg-slate-700 px-3 py-1 rounded-full">0/0</div>
+                        </button>
+                    </div>
+
+                    <div id="not-my-turn" class="hidden p-8 md:p-14 bg-black/50 rounded-[3rem] border border-white/5">
+                        <p class="text-slate-600 italic handwritten text-3xl md:text-5xl leading-snug">
+                            Watching <span id="active-player-name" class="text-yellow-400 underline decoration-indigo-600">...</span> overthink
+                        </p>
+                        <div class="mt-8 flex flex-col gap-6">
+                             <div id="am-i-passed" class="hidden text-rose-500 font-black uppercase text-xs tracking-[0.3em]">You are OUT for this round</div>
+                             <button onclick="voteToSkip()" class="skip-vote-pill px-8 py-3 rounded-full text-rose-400 font-black text-[10px] uppercase tracking-[0.4em] flex items-center gap-4 active:scale-95 transition-all self-center">
+                                <span>VOTE TO SKIP</span>
+                                <span id="skip-count-not-turn" class="bg-rose-900/50 px-2 py-0.5 rounded-full text-xs">0/0</span>
+                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="phase-active" class="hidden text-center space-y-10 animate-pop">
+                    <h4 class="heading-font text-rose-600 text-3xl md:text-5xl pulse-soft tracking-tighter uppercase">Perform Now!</h4>
+                    <p class="text-3xl md:text-4xl font-black text-slate-300">
+                        <span id="challenger-name" class="text-yellow-400">---</span> needs <br>
+                        <span class="text-[10rem] md:text-[14rem] heading-font text-white inline-block my-6 md:my-10 leading-none drop-shadow-2xl" id="challenge-target">--</span>
+                    </p>
+                    
+                    <button id="start-timer-btn" onclick="startChallengeTimer()" class="hidden w-full bg-yellow-400 text-black py-8 md:py-12 rounded-[2.5rem] md:rounded-[4rem] font-black heading-font text-3xl md:text-5xl shadow-2xl active:scale-95 transition-all">
+                        GO!
+                    </button>
+
+                    <div id="challenger-controls" class="hidden flex gap-6">
+                        <button onclick="resolveChallenge(true)" class="flex-1 bg-emerald-600 py-10 rounded-[3rem] heading-font text-2xl md:text-4xl shadow-xl">NAILED IT</button>
+                        <button onclick="resolveChallenge(false)" class="flex-1 bg-rose-800 py-10 rounded-[3rem] heading-font text-2xl md:text-4xl shadow-xl">CHOKED</button>
+                    </div>
+                    <p id="spectator-controls" class="text-slate-600 handwritten text-4xl md:text-5xl italic px-4">Did they hit the target?</p>
+                </div>
+
+                <div id="phase-draw" class="hidden text-center space-y-8">
+                    <button id="draw-btn" onclick="drawNewCard()" class="hidden w-full bg-yellow-400 text-black py-10 rounded-[3rem] font-black heading-font text-3xl md:text-5xl active:scale-95 transition-all shadow-2xl">NEXT CARD</button>
+                    <p id="draw-wait" class="text-slate-600 handwritten text-4xl italic p-8">Host is shuffling reality...</p>
+                    
+                    <button id="end-game-btn" onclick="confirmEndGame()" class="hidden w-full text-rose-900/30 hover:text-rose-600 text-[10px] font-black uppercase tracking-[0.6em] py-4 transition-colors">
+                        End Session
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div id="tutorial-modal" class="fixed inset-0 bg-black/95 hidden flex items-center justify-center p-8 transition-opacity duration-300 z-[1000]">
+        <div class="max-w-md w-full flex flex-col items-center">
+            <div id="tutorial-step-content" class="w-full text-center space-y-12"></div>
+            <div class="mt-20 flex items-center justify-between w-full glass-panel p-12 rounded-[4rem]">
+                <button onclick="prevTutorialStep()" id="tut-prev" class="text-slate-600 font-black uppercase text-[10px] tracking-widest disabled:opacity-0">BACK</button>
+                <div id="tut-dots" class="flex gap-4"></div>
+                <button onclick="nextTutorialStep()" id="tut-next" class="bg-yellow-400 text-black px-14 py-6 rounded-[2rem] font-black heading-font text-2xl shadow-lg">NEXT</button>
+            </div>
+            <button onclick="closeTutorial()" class="mt-14 text-slate-800 hover:text-white transition-colors uppercase text-[10px] font-black tracking-[0.8em] self-center">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Error/Alert Toast -->
+    <div id="error-modal" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 border border-white/10 px-10 py-8 rounded-[3rem] hidden z-[2000] max-w-[90vw] shadow-2xl">
+        <p id="error-message" class="text-white font-black text-center text-lg italic leading-tight"></p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAb9J6qeSnJSvZ2xTmE7MsTdoDs-Dk4Zk0",
+            authDomain: "doubledare-eca8b.firebaseapp.com",
+            projectId: "doubledare-eca8b",
+            storageBucket: "doubledare-eca8b.firebasestorage.app",
+            messagingSenderId: "1050140875786",
+            appId: "1:1050140875786:web:0e6f770e91c503f3ead3f3",
+            measurementId: "G-6NP1JZE8W5"
+        };
+        const appId = "doubledare-eca8b"; 
+
+        // Categories (200+ Guessable)
+        const categories = [
+            { name: "Fruits", base: 1 }, { name: "Pizza Toppings", base: 1 }, { name: "Disney Movies", base: 1 },
+            { name: "Soda Brands", base: 2 }, { name: "Ice Cream Flavors", base: 1 }, { name: "Animals", base: 1 },
+            { name: "Chocolate Bars", base: 2 }, { name: "Social Media Apps", base: 1 }, { name: "Sports", base: 1 },
+            { name: "Clothing Brands", base: 2 }, { name: "Harry Potter Characters", base: 2 }, { name: "Marvel Heroes", base: 2 },
+            { name: "Fast Food Chains", base: 2 }, { name: "Vegetables", base: 1 }, { name: "Coffee Drinks", base: 2 },
+            { name: "School Subjects", base: 1 }, { name: "Emotions", base: 1 }, { name: "Things that are Sticky", base: 3 },
+            { name: "Things that are Heavy", base: 2 }, { name: "Things made of Glass", base: 2 }, { name: "Hobbies", base: 2 },
+            { name: "Parts of a Car", base: 3 }, { name: "Planets", base: 1 }, { name: "Cities in India", base: 3 },
+            { name: "US States", base: 3 }, { name: "Occasions for a Gift", base: 2 }, { name: "Things in a Wallet", base: 3 },
+            { name: "Items of Clothing", base: 1 }, { name: "Types of Footwear", base: 3 }, { name: "Accessories", base: 2 },
+            { name: "Stationery Items", base: 1 }, { name: "Computer Parts", base: 3 }, { name: "Web Browsers", base: 2 },
+            { name: "Famous Villains", base: 3 }, { name: "Netflix Series", base: 2 }, { name: "Anime Series", base: 3 },
+            { name: "Pokemon Names", base: 3 }, { name: "Programming Languages", base: 4 }, { name: "Types of Flowers", base: 3 },
+            { name: "Olympic Sports", base: 2 }, { name: "Brands of Water", base: 3 }, { name: "Household Chores", base: 1 },
+            { name: "Ways to Travel", base: 1 }, { name: "Things on a Desk", base: 1 }, { name: "Disney Princesses", base: 2 },
+            { name: "Sitcom Characters", base: 3 }, { name: "Famous Actors", base: 2 }, { name: "Shapes", base: 1 },
+            { name: "Potato Chip Flavors", base: 1 }, { name: "Burger Toppings", base: 1 }, { name: "Sushi Types", base: 3 },
+            { name: "YouTube Channels", base: 2 }, { name: "Apps for Editing", base: 3 }, { name: "Patterns on Fabric", base: 4 },
+            { name: "Senses", base: 1 }, { name: "Ways to say Hello", base: 2 }, { name: "Reasons to Celebrate", base: 2 },
+            { name: "Ways to Spend Money", base: 1 }, { name: "European Countries", base: 2 }, { name: "Bakery Items", base: 1 },
+            { name: "Sandwich Fillings", base: 1 }, { name: "Salad Ingredients", base: 1 }, { name: "Condiments", base: 1 },
+            { name: "Computer Shortcuts", base: 4 }, { name: "AI Tools", base: 3 }, { name: "Pet Animals", base: 1 },
+            { name: "Zoo Animals", base: 1 }, { name: "Farm Animals", base: 1 }, { name: "Types of Berries", base: 2 },
+            { name: "Historical Figures", base: 3 }, { name: "Items in a junk drawer", base: 2 }, { name: "Marvel Movies", base: 2 },
+            { name: "Video Game Consoles", base: 1 }, { name: "Musical Instruments", base: 2 }, { name: "Breakfast Cereals", base: 1 },
+            { name: "Languages", base: 2 }, { name: "Card Games", base: 2 }, { name: "Board Games", base: 2 },
+            { name: "Desserts", base: 1 }, { name: "Kitchen Appliances", base: 2 }, { name: "Spices", base: 2 },
+            { name: "Rappers", base: 2 }, { name: "Pop Singers", base: 2 }, { name: "Classic Rock Bands", base: 3 },
+            { name: "Types of Pasta", base: 2 }, { name: "Super Mario Characters", base: 2 }, { name: "Things in a Fridge", base: 1 },
+            { name: "Reasons to wake up early", base: 2 }, { name: "Types of Weather", base: 1 }, { name: "Inventions", base: 3 },
+            { name: "Types of Furniture", base: 1 }, { name: "Cleaning Supplies", base: 1 }, { name: "Garden Tools", base: 2 },
+            { name: "Tools in a Toolbox", base: 2 }, { name: "Things in a Purse", base: 2 }, { name: "Jewelry Items", base: 2 },
+            { name: "Types of Cheese", base: 4 }, { name: "Types of Bread", base: 2 }, { name: "Types of Cake", base: 2 },
+            { name: "Candy Brands", base: 2 }, { name: "Car Brands", base: 2 }, { name: "Streaming Services", base: 1 },
+            { name: "Social Media Filters", base: 4 }, { name: "Things in a Hospital", base: 3 }, { name: "Star Wars Planets", base: 4 },
+            { name: "Harry Potter Spells", base: 4 }, { name: "Avengers Characters", base: 2 }, { name: "Justice League Members", base: 2 },
+            { name: "Sitcom Dads", base: 3 }, { name: "Cartoon Villains", base: 3 }, { name: "Types of Dance", base: 3 },
+            { name: "Martial Arts", base: 3 }, { name: "Scientific Fields", base: 3 }, { name: "Bones in the Body", base: 6 },
+            { name: "Periodic Elements", base: 5 }, { name: "Shapes with 4+ sides", base: 3 }, { name: "Metals", base: 4 },
+            { name: "Gemstones", base: 4 }, { name: "Types of Clouds", base: 6 }, { name: "Types of Fish", base: 4 },
+            { name: "Insects", base: 3 }, { name: "Birds", base: 3 }, { name: "Reptiles", base: 4 },
+            { name: "Mythical Creatures", base: 3 }, { name: "Things that are Red", base: 1 }, { name: "Things that are Yellow", base: 1 },
+            { name: "Things that Smell Good", base: 2 }, { name: "Things that are Transparent", base: 3 }, { name: "Things you can Fold", base: 3 },
+            { name: "Things that use Batteries", base: 2 }, { name: "Apps on your Phone", base: 1 }, { name: "90s Hits", base: 3 },
+            { name: "80s Hits", base: 4 }, { name: "Christmas Songs", base: 2 }, { name: "Love Songs", base: 2 },
+            { name: "Oscar Winning Movies", base: 4 }, { name: "Pixar Movies", base: 2 }, { name: "Dreamworks Movies", base: 3 },
+            { name: "Ghibli Movies", base: 5 }, { name: "Types of Soup", base: 3 }, { name: "Types of Tea", base: 2 },
+            { name: "Energy Drink Brands", base: 3 }, { name: "Computer Brands", base: 2 }, { name: "Smartphone Models", base: 3 },
+            { name: "Furniture Stores", base: 3 }, { name: "Luxury Car Brands", base: 4 }, { name: "NBA Teams", base: 3 },
+            { name: "NFL Teams", base: 4 }, { name: "Soccer Players", base: 3 }, { name: "Cricket Terms", base: 4 },
+            { name: "Tennis Players", base: 4 }, { name: "F1 Teams", base: 4 }, { name: "Olympics Cities", base: 5 },
+            { name: "National Flags", base: 3 }, { name: "National Anthems", base: 7 }, { name: "Famous Landmarks", base: 3 },
+            { name: "African Countries", base: 5 }, { name: "Asian Countries", base: 3 }, { name: "South American Countries", base: 4 },
+            { name: "Rivers of the World", base: 5 }, { name: "Mountain Ranges", base: 4 }, { name: "Oceans", base: 1 },
+            { name: "Planets in Solar System", base: 1 }, { name: "Capital Cities", base: 4 }, { name: "Famous Bridges", base: 6 },
+            { name: "Famous Inventors", base: 5 }, { name: "Famous Scientists", base: 4 }, { name: "Famous Artists", base: 5 },
+            { name: "Philosophers", base: 6 }, { name: "Types of Architecture", base: 5 }, { name: "Musical Genres", base: 3 },
+            { name: "Jazz Musicians", base: 5 }, { name: "Classical Composers", base: 5 }, { name: "K-Pop Groups", base: 4 },
+            { name: "TikTok Dances", base: 5 }, { name: "Memes", base: 3 }, { name: "Twitch Streamers", base: 3 },
+            { name: "Websites for News", base: 2 }, { name: "Shopping Websites", base: 2 }, { name: "Educational Apps", base: 3 }
+        ];
+
+        // Sarcasm Jabs (30+ per scenario)
+        const jabs = {
+            profanity: [
+                "Classy. Bid vaporized.",
+                "Blocked. Go wash your mouth.",
+                "Potty mouth detected.",
+                " Wit over filth, please.",
+                "Blocked. Digital grass needs touching."
+            ],
+            bidding: [
+                "dreaming in 4K.",
+                "confidence is silent, insecurity is loud.",
+                "digging their own grave.",
+                "actually serious? The room is laughing.",
+                "the first to go in a horror movie.",
+                "I smell a bluff. Desperation.",
+                "really think they can do that? Lol.",
+                "math isn't mathing.",
+                "trying to impress someone?",
+                "I'll believe it when I see it. Never.",
+                "stop it. Get some help.",
+                "if overconfidence was money, they'd be rich.",
+                "bold choice. Brain, keep up!",
+                "one way ticket to Choke City.",
+                "the stakes are high. IQ? TBD.",
+                "is this a bot? Inhuman optimism.",
+                "the 'Ego Special' has arrived.",
+                "confidence: 100. Reality: 0.",
+                "hallucinations detected.",
+                "that bid is a resignation."
+            ],
+            pass: [
+                "playing it safe. Cowardice.",
+                "folded like a lawn chair.",
+                "brain used for once: no bid.",
+                "the silence is deafening.",
+                "safe choice. Boring, but safe.",
+                "tactical retreat? Or just regular fear?",
+                "one less dreamer.",
+                "watching from the sidelines.",
+                "the 'Pass' button was made for this.",
+                "admitted defeat early.",
+                "letting the big dogs play.",
+                "resting those vocal cords?",
+                "officially a spectator.",
+                "allergic to challenges.",
+                "avoiding embarrassment."
+            ],
+            win: [
+                "Luck was on their side. Don't get used to it.",
+                "I'm shocked. Truly. No choke.",
+                "Wait, they did it? Simulation broken.",
+                "Points awarded. Ego grows.",
+                "Is this a bot? Too smooth.",
+                "Practicing in the shower, clearly.",
+                "Even a broken clock is right twice a day.",
+                "Miracle! They were actually lucky.",
+                "Calculated. By your standards.",
+                "Hacking detected. Competence?!",
+                "A rare moment of skill. Enjoy it.",
+                "Victory. The room is annoyed.",
+                "Solid performance. Head's growing.",
+                "Barely adequate, but a win.",
+                "Simulation confirms: decent."
+            ],
+            fail: [
+                "Be more realistic. Or better.",
+                "Gravity wins. You lose.",
+                "Painful to watch. For all of us.",
+                "Zero. Zip. Nada. Contribution: 0.",
+                "Silence was deafening.",
+                "Choke. Cough. Choke.",
+                "Performance art? Or a tragedy?",
+                "Expectations were low, still disappointed.",
+                "Back to the drawing board.",
+                "Goldfish memory detected.",
+                "If failure was a sport, you'd win Gold.",
+                "Tragic. Just tragic.",
+                "Embarrassing. Let's move on.",
+                "Brain speed < Mouth speed.",
+                "Disappointment: 100. Skill: 0."
+            ]
+        };
+
+        let db, auth, user, currentSessionId;
+        let gameState = {};
+        let myName = "";
+        let potentialBid = 1;
+        let countdownInterval;
+        let presenceInterval;
+
+        const tutorialSteps = [
+            { title: "THE FLIP", text: "Host draws a card. Category and time appear. Read it out loud!", icon: "fa-clone" },
+            { title: "THE BID", text: "Guess how many you can name. 'I can do 10!'", icon: "fa-bullhorn" },
+            { title: "THE DARE", text: "Others can Raise, Pass, or Challenge with 'BETCHA CAN'T!'", icon: "fa-arrow-trend-up" },
+            { title: "LOCKOUT", text: "If you Pass, you are OUT for this card. Choose wisely!", icon: "fa-lock" },
+            { title: "SHOWDOWN", text: "The Challenger performs while the room counts. Be fast!", icon: "fa-stopwatch" }
+        ];
+
+        let currentTutStep = 0;
+        window.openTutorial = () => { currentTutStep = 0; updateTutorialUI(); document.getElementById('tutorial-modal').classList.remove('hidden'); };
+        window.closeTutorial = () => { document.getElementById('tutorial-modal').classList.add('hidden'); };
+        window.nextTutorialStep = () => { if (currentTutStep < tutorialSteps.length - 1) { currentTutStep++; updateTutorialUI(); } else { closeTutorial(); } };
+        window.prevTutorialStep = () => { if (currentTutStep > 0) { currentTutStep--; updateTutorialUI(); } };
+
+        const updateTutorialUI = () => {
+            const step = tutorialSteps[currentTutStep];
+            document.getElementById('tutorial-step-content').innerHTML = `
+                <div class="bg-slate-900 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 border border-white/10 shadow-2xl">
+                    <i class="fas ${step.icon} text-yellow-500 text-4xl"></i>
+                </div>
+                <h2 class="heading-font text-5xl md:text-7xl text-white drop-shadow-2xl leading-none uppercase">${step.title}</h2>
+                <p class="handwritten text-3xl md:text-4xl text-slate-400 px-6 leading-tight">${step.text}</p>
+            `;
+            document.getElementById('tut-dots').innerHTML = tutorialSteps.map((_, i) => 
+                `<div class="w-4 h-4 rounded-full transition-all duration-300 ${i === currentTutStep ? 'bg-yellow-400 scale-125 shadow-[0_0_10px_#fbbf24]' : 'bg-slate-800'}"></div>`).join('');
+            document.getElementById('tut-prev').disabled = currentTutStep === 0;
+            document.getElementById('tut-next').innerText = currentTutStep === tutorialSteps.length - 1 ? "READY" : "NEXT";
+        };
+
+        const showJabToast = (message) => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<p class="handwritten text-lg md:text-xl leading-tight italic">${message}</p>`;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('toast-exit');
+                setTimeout(() => toast.remove(), 500);
+            }, 6000);
+        };
+
+        const updateFitText = () => {
+            const container = document.getElementById('category-container');
+            const textEl = document.getElementById('card-category');
+            if (!container || !textEl) return;
+
+            textEl.style.transform = `scale(1)`;
+            const maxWidth = container.offsetWidth;
+            const textWidth = textEl.scrollWidth;
+
+            if (textWidth > maxWidth) {
+                const ratio = maxWidth / textWidth;
+                textEl.style.transform = `scale(${ratio * 0.98})`;
+            }
+        };
+
+        window.showScreen = (id) => {
+            ['loading', 'auth-screen', 'lobby-screen', 'game-screen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+            const pin = document.getElementById('room-pin');
+            if (id === 'game-screen' && currentSessionId) {
+                pin.classList.remove('hidden');
+                document.getElementById('pin-code').innerText = currentSessionId;
+                setTimeout(updateFitText, 100);
+            } else {
+                pin.classList.add('hidden');
+            }
+        };
+
+        const getRandomJab = (type, data = {}) => {
+            let list = jabs[type];
+            let history = gameState.jabHistory || [];
+            let available = list.filter(j => !history.includes(j));
+            if (available.length === 0) available = list;
+            let jab = available[Math.floor(Math.random() * available.length)];
+            
+            let fullJab = "";
+            if (type === 'bidding') fullJab = `${data.name} dared ${data.value}, ${jab}`;
+            else if (type === 'pass') fullJab = `${data.name} passed, ${jab}`;
+            else fullJab = `${data.name} ${type === 'win' ? 'nailed it' : 'choked'}, ${jab}`;
+
+            return { original: jab, text: fullJab };
+        };
+
+        window.showError = (msg) => {
+            const el = document.getElementById('error-modal');
+            document.getElementById('error-message').innerText = msg;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 5000);
+        };
+
+        const updateHeartbeat = async () => {
+            if (!currentSessionId || !user) return;
+            const sessionRef = getSessionDoc(currentSessionId);
+            const snap = await getDoc(sessionRef);
+            if (!snap.exists()) return;
+            const players = snap.data().players;
+            const meIndex = players.findIndex(p => p.uid === user.uid);
+            if (meIndex !== -1) {
+                players[meIndex].lastSeen = Date.now();
+                await updateDoc(sessionRef, { players });
+            }
+        };
+
+        const init = async () => {
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                await signInAnonymously(auth);
+                onAuthStateChanged(auth, u => { if (u) { user = u; showScreen('auth-screen'); } });
+            } catch (err) { showError("Firebase Connection Error."); }
+        };
+
+        const getSessionDoc = (code) => doc(db, 'artifacts', appId, 'public', 'data', 'sessions', code);
+
+        window.createNewGame = async () => {
+            const name = document.getElementById('username-input').value.trim();
+            if (!name) return showError("Enter your name first!");
+            myName = name;
+            const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+            try {
+                await setDoc(getSessionDoc(code), {
+                    code, host: user.uid, status: 'lobby',
+                    players: [{ uid: user.uid, name: myName, score: 0, lastSeen: Date.now() }],
+                    currentBid: { bidder: null, bidderName: null, value: 0 },
+                    turnIndex: 0, activePlayerUid: user.uid, timerStartedAt: null,
+                    roundStarterIndex: 0, categoryHistory: [], currentCard: null,
+                    jabHistory: [], skipVotes: [], passedUids: [], lastGlobalJab: ""
+                });
+                joinSession(code);
+            } catch (e) { showError("Write Permission Denied."); }
+        };
+
+        window.joinGame = async () => {
+            const code = document.getElementById('game-code-input').value.trim().toUpperCase();
+            const name = document.getElementById('username-input').value.trim();
+            if (!code || !name) return showError("Need code and name!");
+            myName = name;
+            const sessionRef = getSessionDoc(code);
+            const snap = await getDoc(sessionRef);
+            if (!snap.exists()) return showError("Room not found!");
+            const sessionData = snap.data();
+            const existingIndex = sessionData.players.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+            if (existingIndex !== -1) {
+                sessionData.players[existingIndex].uid = user.uid;
+                sessionData.players[existingIndex].lastSeen = Date.now();
+                await updateDoc(sessionRef, { players: sessionData.players });
+            } else {
+                await updateDoc(sessionRef, { players: arrayUnion({ uid: user.uid, name: myName, score: 0, lastSeen: Date.now() }) });
+            }
+            joinSession(code);
+        };
+
+        const joinSession = (code) => {
+            currentSessionId = code;
+            onSnapshot(getSessionDoc(code), doc => { 
+                if (doc.exists()) { 
+                    const newData = doc.data();
+                    if (newData.lastGlobalJab !== gameState.lastGlobalJab && newData.lastGlobalJab) {
+                        showJabToast(newData.lastGlobalJab);
+                    }
+                    gameState = newData; 
+                    render(); 
+                }
+                else { showScreen('auth-screen'); currentSessionId = null; }
+            });
+            clearInterval(presenceInterval);
+            presenceInterval = setInterval(updateHeartbeat, 8000);
+        };
+
+        const render = () => {
+            const onlinePlayers = gameState.players.filter(p => (Date.now() - (p.lastSeen || 0)) < 25000);
+            if (gameState.status === 'lobby') {
+                showScreen('lobby-screen');
+                document.getElementById('display-game-code').innerText = gameState.code;
+                document.getElementById('player-count').innerText = gameState.players.length;
+                document.getElementById('player-list').innerHTML = gameState.players.map(p => {
+                    const isOnline = (Date.now() - (p.lastSeen || 0)) < 25000;
+                    return `<li class="bg-slate-900/60 p-5 rounded-3xl border border-white/5 flex justify-between items-center transition-all">
+                        <div class="flex items-center gap-4"><div class="status-dot ${isOnline ? 'online' : 'offline'}"></div><span class="font-bold text-xl">${p.name}</span></div>
+                        ${p.uid === gameState.host ? '<span class="text-[9px] bg-yellow-400 text-black px-3 py-1 rounded-full font-black tracking-widest uppercase">Host</span>' : ''}
+                    </li>`;
+                }).join('');
+                const startBtn = document.getElementById('start-game-btn');
+                if (user.uid === gameState.host) {
+                    startBtn.classList.remove('hidden');
+                    startBtn.classList.toggle('btn-disabled', gameState.players.length < 2);
+                    startBtn.disabled = gameState.players.length < 2;
+                    document.getElementById('wait-message').classList.add('hidden');
+                }
+            } else {
+                showScreen('game-screen');
+                document.getElementById('scores-strip').innerHTML = gameState.players.map(p => {
+                    const isOnline = (Date.now() - (p.lastSeen || 0)) < 25000;
+                    const isPassed = gameState.passedUids?.includes(p.uid);
+                    return `<div class="flex-shrink-0 bg-slate-900 border border-white/10 px-5 py-3 rounded-2xl flex gap-4 items-center shadow-xl ${isPassed ? 'passed-player' : ''}">
+                        <div class="status-dot ${isOnline ? 'online' : 'offline'}"></div>
+                        <span class="text-[10px] md:text-xs font-black ${p.uid === user.uid ? 'text-yellow-400 underline decoration-indigo-600 decoration-4' : 'text-slate-500'}">${p.name}</span>
+                        <span class="bg-slate-800 text-[10px] px-3 py-1 rounded-full font-black text-white">${p.score}</span>
+                    </div>`;
+                }).join('');
+
+                if (gameState.currentCard) {
+                    document.getElementById('card-category').innerHTML = `Name <span class="text-yellow-400 underline decoration-indigo-600">${gameState.currentCard.category}</span>!`;
+                    document.getElementById('card-time').innerText = `${gameState.currentCard.time}s`;
+                    document.getElementById('card-points').innerText = `${gameState.currentCard.points} PTS`;
+                    setTimeout(updateFitText, 10);
+                }
+
+                const skipText = `${gameState.skipVotes?.length || 0}/${Math.ceil(onlinePlayers.length / 2)}`;
+                document.getElementById('skip-count').innerText = skipText;
+                document.getElementById('skip-count-not-turn').innerText = skipText;
+                if (gameState.status === 'bidding' && gameState.skipVotes?.length >= Math.ceil(onlinePlayers.length / 2)) {
+                    if (user.uid === gameState.host) handleCategorySkip();
+                }
+                updatePhases();
+            }
+        };
+
+        const handleCategorySkip = async () => {
+            let filtered = categories.filter(c => !gameState.categoryHistory.includes(c.name));
+            if (filtered.length === 0) filtered = categories;
+            const c = filtered[Math.floor(Math.random() * filtered.length)];
+            const t = [10, 15, 20, 30][Math.floor(Math.random() * 4)];
+            const pts = Math.min(10, c.base + {10:6, 15:4, 20:2, 30:1}[t]);
+            let hist = [...gameState.categoryHistory, c.name];
+            if (hist.length > 10) hist.shift();
+            await updateDoc(getSessionDoc(currentSessionId), {
+                currentCard: { category: c.name, time: t, points: pts },
+                currentBid: { bidder: null, bidderName: null, value: 0 },
+                timerStartedAt: null, categoryHistory: hist, skipVotes: [],
+                passedUids: [], lastGlobalJab: "Democratic skip! New prompt."
+            });
+        };
+
+        const updatePhases = () => {
+            ['phase-bidding', 'phase-active', 'phase-draw'].forEach(p => document.getElementById(p).classList.add('hidden'));
+            if (gameState.status === 'bidding') {
+                document.getElementById('phase-bidding').classList.remove('hidden');
+                document.getElementById('current-bid-value').innerText = gameState.currentBid.value;
+                document.getElementById('current-bidder').innerText = gameState.currentBid.bidderName || "None";
+                if (gameState.activePlayerUid === user.uid) {
+                    document.getElementById('bid-controls').classList.remove('hidden');
+                    document.getElementById('not-my-turn').classList.add('hidden');
+                    const isHighBidder = gameState.currentBid.bidder === user.uid;
+                    document.getElementById('pass-btn').classList.toggle('btn-disabled', isHighBidder);
+                    document.getElementById('pass-btn').disabled = isHighBidder;
+                    
+                    if (potentialBid <= gameState.currentBid.value) {
+                        potentialBid = gameState.currentBid.value + 1;
+                        document.getElementById('my-potential-bid').innerText = potentialBid;
+                    }
+                } else {
+                    document.getElementById('bid-controls').classList.add('hidden');
+                    document.getElementById('not-my-turn').classList.remove('hidden');
+                    const act = gameState.players.find(p => p.uid === gameState.activePlayerUid);
+                    document.getElementById('active-player-name').innerText = act ? act.name : '...';
+                    document.getElementById('am-i-passed').classList.toggle('hidden', !gameState.passedUids?.includes(user.uid));
+                }
+                const onlineUids = gameState.players.filter(p => (Date.now() - (p.lastSeen || 0)) < 25000).map(p => p.uid);
+                const activeBidders = onlineUids.filter(uid => !gameState.passedUids?.includes(uid));
+                if (gameState.currentBid.value > 0 && activeBidders.length === 1 && activeBidders[0] === gameState.currentBid.bidder) {
+                    if (user.uid === gameState.host) updateDoc(getSessionDoc(currentSessionId), { status: 'active', timerStartedAt: null });
+                }
+            } else if (gameState.status === 'active') {
+                document.getElementById('phase-active').classList.remove('hidden');
+                document.getElementById('challenger-name').innerText = gameState.currentBid.bidderName;
+                document.getElementById('challenge-target').innerText = gameState.currentBid.value;
+                const isChallenger = gameState.currentBid.bidder === user.uid;
+                const started = !!gameState.timerStartedAt;
+                document.getElementById('start-timer-btn').classList.toggle('hidden', !isChallenger || started);
+                document.getElementById('challenger-controls').classList.toggle('hidden', !isChallenger || !started);
+                document.getElementById('spectator-controls').classList.toggle('hidden', isChallenger);
+                handleTimer();
+            } else if (gameState.status === 'draw') {
+                document.getElementById('phase-draw').classList.remove('hidden');
+                const host = user.uid === gameState.host;
+                document.getElementById('draw-btn').classList.toggle('hidden', !host);
+                document.getElementById('end-game-btn').classList.toggle('hidden', !host);
+                document.getElementById('draw-wait').classList.toggle('hidden', host);
+                
+                // Ensure timer UI is reset
+                const prog = document.getElementById('timer-progress');
+                const num = document.getElementById('countdown-num');
+                if (prog) prog.style.width = "100%";
+                if (num) num.innerText = "0";
+            }
+        };
+
+        const handleTimer = () => {
+            const cont = document.getElementById('timer-container');
+            const disp = document.getElementById('timer-display');
+            const num = document.getElementById('countdown-num');
+            const prog = document.getElementById('timer-progress');
+            if (gameState.timerStartedAt) {
+                cont.classList.remove('hidden'); disp.classList.remove('hidden');
+                clearInterval(countdownInterval);
+                const limit = gameState.currentCard.time;
+                countdownInterval = setInterval(() => {
+                    const rem = Math.max(0, limit - (Date.now() - gameState.timerStartedAt) / 1000);
+                    num.innerText = Math.ceil(rem);
+                    prog.style.width = `${(rem / limit) * 100}%`;
+                    if (rem <= 0) {
+                        clearInterval(countdownInterval);
+                        num.innerText = "0";
+                        prog.style.width = "0%";
+                    }
+                }, 100);
+            } else { 
+                cont.classList.add('hidden'); 
+                disp.classList.add('hidden'); 
+                clearInterval(countdownInterval); 
+            }
+        };
+
+        const getNextBiddingPlayer = (players, currentIdx, passedUids) => {
+            let nextIdx = (currentIdx + 1) % players.length;
+            let count = 0;
+            while (count < players.length) {
+                const p = players[nextIdx];
+                const isOnline = (Date.now() - (p.lastSeen || 0)) < 25000;
+                if (isOnline && !passedUids.includes(p.uid)) return nextIdx;
+                nextIdx = (nextIdx + 1) % players.length;
+                count++;
+            }
+            return currentIdx;
+        };
+
+        window.changeBid = (d) => {
+            potentialBid = Math.max(gameState.currentBid.value + 1, potentialBid + d);
+            document.getElementById('my-potential-bid').innerText = potentialBid;
+        };
+
+        window.voteToSkip = async () => {
+            const voted = gameState.skipVotes?.includes(user.uid);
+            await updateDoc(getSessionDoc(currentSessionId), { skipVotes: voted ? arrayRemove(user.uid) : arrayUnion(user.uid) });
+        };
+
+        window.passTurn = async () => {
+            if (gameState.currentBid.bidder === user.uid) return;
+            const newPassed = [...(gameState.passedUids || []), user.uid];
+            const nextIdx = getNextBiddingPlayer(gameState.players, gameState.turnIndex, newPassed);
+            const jabObj = getRandomJab('pass', { name: myName });
+            let hist = [...(gameState.jabHistory || []), jabObj.original];
+            if (hist.length > 10) hist.shift();
+            await updateDoc(getSessionDoc(currentSessionId), {
+                passedUids: newPassed, turnIndex: nextIdx, activePlayerUid: gameState.players[nextIdx].uid,
+                lastGlobalJab: jabObj.text, jabHistory: hist
+            });
+        };
+
+        window.placeBid = async () => {
+            const nextIdx = getNextBiddingPlayer(gameState.players, gameState.turnIndex, gameState.passedUids || []);
+            const jabObj = getRandomJab('bidding', { name: myName, value: potentialBid, time: gameState.currentCard.time });
+            let hist = [...(gameState.jabHistory || []), jabObj.original];
+            if (hist.length > 10) hist.shift();
+            await updateDoc(getSessionDoc(currentSessionId), {
+                currentBid: { bidder: user.uid, bidderName: myName, value: potentialBid },
+                turnIndex: nextIdx, activePlayerUid: gameState.players[nextIdx].uid,
+                lastGlobalJab: jabObj.text, skipVotes: [], jabHistory: hist
+            });
+        };
+
+        window.callBetchaCant = async () => {
+            if (gameState.currentBid.value === 0) return showError("Wait for a bid!");
+            await updateDoc(getSessionDoc(currentSessionId), { status: 'active', timerStartedAt: null, skipVotes: [] });
+        };
+
+        window.startChallengeTimer = async () => { await updateDoc(getSessionDoc(currentSessionId), { timerStartedAt: Date.now() }); };
+
+        window.drawNewCard = async () => {
+            let filtered = categories.filter(c => !gameState.categoryHistory.includes(c.name));
+            if (filtered.length === 0) filtered = categories;
+            const c = filtered[Math.floor(Math.random() * filtered.length)];
+            const t = [10, 15, 20, 30][Math.floor(Math.random() * 4)];
+            const pts = Math.min(10, c.base + {10:6, 15:4, 20:2, 30:1}[t]);
+            let hist = [...gameState.categoryHistory, c.name];
+            if (hist.length > 10) hist.shift();
+            
+            potentialBid = 1;
+            document.getElementById('my-potential-bid').innerText = "1";
+
+            const starter = (gameState.roundStarterIndex + 1) % gameState.players.length;
+            await updateDoc(getSessionDoc(currentSessionId), {
+                status: 'bidding', currentCard: { category: c.name, time: t, points: pts },
+                currentBid: { bidder: null, bidderName: null, value: 0 },
+                timerStartedAt: null, roundStarterIndex: starter,
+                activePlayerUid: gameState.players[starter].uid,
+                turnIndex: starter, categoryHistory: hist, lastGlobalJab: "", skipVotes: [],
+                passedUids: []
+            });
+        };
+
+        window.startGame = () => { if (gameState.players.length >= 2) drawNewCard(); };
+
+        window.resolveChallenge = async (success) => {
+            clearInterval(countdownInterval);
+            const up = gameState.players.map(p => p.uid === user.uid ? { ...p, score: p.score + (success ? gameState.currentCard.points : 0) } : p);
+            const jabObj = getRandomJab(success ? 'win' : 'fail', { name: myName, time: gameState.currentCard.time });
+            let hist = [...(gameState.jabHistory || []), jabObj.original];
+            if (hist.length > 10) hist.shift();
+            await updateDoc(getSessionDoc(currentSessionId), { players: up, status: 'draw', timerStartedAt: null, lastGlobalJab: jabObj.text, jabHistory: hist });
+        };
+
+        window.confirmEndGame = async () => { if (confirm("End session for everyone?")) await deleteDoc(getSessionDoc(currentSessionId)); };
+
+        window.onload = init;
+        window.addEventListener('resize', updateFitText);
+    </script>
+</body>
+</html>

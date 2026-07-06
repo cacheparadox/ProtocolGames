@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PROTOCOL GATEWAY — The central hub for all ICE hacking protocols and games. Select your mission and initialize the connection.">
+    <title>PROTOCOL // CENTRAL_HUB</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>">
+    <script src="./cdn.tailwindcss.com/index.html"></script>
+    <script src="./unpkg.com/lucide@latest"></script>
+    <link href="./fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&family=JetBrains+Mono%253Awght@400%3B700%3B800&display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #05030a;
+            --term-violet: #8b5cf6;
+            --term-magenta: #d946ef;
+            --term-cyan: #0ea5e9;
+            --term-emerald: #10b981;
+            --term-gold: #eab308;
+            --grid-bg: rgba(11, 7, 20, 0.9);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* ---- Animated particle canvas ---- */
+        #particle-canvas {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0; pointer-events: none;
+        }
+
+        /* ---- CRT scanlines ---- */
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background:
+                linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.12) 50%),
+                linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03));
+            background-size: 100% 3px, 3px 100%;
+        }
+
+        /* ---- Header glitch ---- */
+        @keyframes glitch1 {
+            0%,94%,100% { clip-path: none; transform: none; }
+            95% { clip-path: polygon(0 20%,100% 20%,100% 40%,0 40%); transform: translateX(-4px); }
+            97% { clip-path: polygon(0 60%,100% 60%,100% 80%,0 80%); transform: translateX(4px); }
+        }
+        .glitch { animation: glitch1 8s infinite; }
+
+        /* ---- Section divider ---- */
+        .section-label {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 10px;
+            letter-spacing: 0.5em;
+            color: var(--term-violet);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .section-label::before, .section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(139,92,246,0.3));
+        }
+        .section-label::after { background: linear-gradient(to left, transparent, rgba(139,92,246,0.3)); }
+
+        /* ---- Game Card ---- */
+        .game-card {
+            background: var(--grid-bg);
+            border: 1px solid rgba(139,92,246,0.12);
+            position: relative;
+            transition: all 0.35s cubic-bezier(0.175,0.885,0.32,1.275);
+            backdrop-filter: blur(12px);
+            overflow: hidden;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .game-card::before {
+            content: ''; position: absolute; top: 0; left: 0;
+            width: 14px; height: 14px;
+            border-top: 2px solid var(--card-accent, var(--term-cyan));
+            border-left: 2px solid var(--card-accent, var(--term-cyan));
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .game-card::after {
+            content: ''; position: absolute; bottom: 0; right: 0;
+            width: 14px; height: 14px;
+            border-bottom: 2px solid var(--card-accent, var(--term-cyan));
+            border-right: 2px solid var(--card-accent, var(--term-cyan));
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .game-card:hover::before, .game-card:hover::after { opacity: 1; }
+
+        .game-card:hover {
+            border-color: var(--card-accent, var(--term-cyan));
+            box-shadow: 0 0 35px rgba(14,165,233,0.12), 0 20px 40px rgba(0,0,0,0.4);
+            transform: translateY(-6px);
+            z-index: 10;
+        }
+
+        .card-top-bar {
+            height: 3px;
+            width: 100%;
+            background: linear-gradient(90deg, var(--card-accent, var(--term-cyan)) 0%, transparent 80%);
+        }
+
+        .card-body { padding: 24px; flex: 1; display: flex; flex-direction: column; }
+
+        .icon-box {
+            width: 52px; height: 52px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.06);
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+            color: var(--card-accent, var(--term-cyan));
+        }
+        .game-card:hover .icon-box {
+            background: color-mix(in srgb, var(--card-accent, var(--term-cyan)) 15%, transparent);
+            border-color: var(--card-accent, var(--term-cyan));
+            box-shadow: 0 0 20px color-mix(in srgb, var(--card-accent, var(--term-cyan)) 30%, transparent);
+        }
+
+        .card-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            font-weight: 900;
+            color: white;
+            margin-bottom: 8px;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+        .game-card:hover .card-title { color: var(--card-accent, var(--term-cyan)); }
+
+        .card-desc {
+            font-size: 10px;
+            color: #64748b;
+            line-height: 1.7;
+            flex: 1;
+            margin-bottom: 20px;
+        }
+
+        .status-tag {
+            font-size: 8px;
+            letter-spacing: 2px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 4px;
+            align-self: flex-start;
+        }
+        .status-online { background: rgba(16,185,129,0.1); color: var(--term-emerald); border: 1px solid var(--term-emerald); }
+        .status-new { background: rgba(234,179,8,0.1); color: var(--term-gold); border: 1px solid var(--term-gold); }
+        .status-casino { background: rgba(234,179,8,0.1); color: var(--term-gold); border: 1px solid rgba(234,179,8,0.5); }
+
+        .btn-launch {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #64748b;
+            padding: 10px 20px;
+            border-radius: 99px;
+            text-align: center;
+            font-size: 10px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+        }
+        .game-card:hover .btn-launch {
+            background: var(--card-accent, var(--term-cyan));
+            color: black;
+            border-color: var(--card-accent, var(--term-cyan));
+            box-shadow: 0 0 20px color-mix(in srgb, var(--card-accent, var(--term-cyan)) 40%, transparent);
+        }
+
+        /* Casino card special */
+        .casino-card {
+            background: linear-gradient(135deg, #0a0a0f 0%, #0f0a00 100%);
+            border: 1px solid rgba(234,179,8,0.2);
+        }
+        .casino-card:hover {
+            border-color: var(--term-gold);
+            box-shadow: 0 0 35px rgba(234,179,8,0.15), 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        /* Search / Filter */
+        #search-box {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(139,92,246,0.2);
+            color: white;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.3s;
+            width: 220px;
+        }
+        #search-box:focus { border-color: var(--term-cyan); }
+        #search-box::placeholder { color: #334155; }
+
+        /* Stat badges */
+        .stat-badge {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 12px 24px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(139,92,246,0.1);
+            border-radius: 12px;
+        }
+        .stat-num { font-family: 'Orbitron', sans-serif; font-size: 24px; font-weight: 900; color: var(--term-cyan); }
+        .stat-label { font-size: 9px; color: #475569; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 2px; }
+
+        .hidden-card { display: none !important; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- Header -->
+    <header class="relative z-10 w-full border-b border-violet-900/20 shadow-2xl" style="background: rgba(5,3,10,0.8); backdrop-filter: blur(20px);">
+        <div class="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div class="text-center sm:text-left">
+                <h1 class="orbitron text-3xl sm:text-5xl font-black text-white tracking-[0.35em] glitch">
+                    PROTOCOL<span class="text-cyan-500">GATEWAY</span>
+                </h1>
+                <div class="text-[10px] text-violet-500 orbitron tracking-[0.5em] mt-2">
+                    SELECT_PROTOCOL // SESSION_ACTIVE_2026
+                </div>
+            </div>
+            <div class="flex items-center gap-4 flex-wrap justify-center">
+                <div class="stat-badge">
+                    <span class="stat-num" id="total-count">14</span>
+                    <span class="stat-label">Protocols</span>
+                </div>
+                <div class="stat-badge">
+                    <span class="stat-num text-emerald-400">7</span>
+                    <span class="stat-label">New</span>
+                </div>
+                <input id="search-box" type="text" placeholder="SEARCH_PROTOCOL_" oninput="filterCards(this.value)">
+            </div>
+        </div>
+        <div class="h-px w-full bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
+    </header>
+
+    <!-- Main -->
+    <main class="relative z-10 flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-12">
+
+        <!-- PUZZLE PROTOCOLS -->
+        <div class="section-label">PUZZLE_PROTOCOLS</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-16" id="puzzle-grid">
+
+            <a href="./protocoltriangulation.edgeone.app/index.html" class="game-card" style="--card-accent:#0ea5e9" data-name="protocol triangulation spatial">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="locate-fixed" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">TRIANGULATION</div>
+                    <div class="card-desc">Spatial reasoning. Intercept pings to triangulate hidden key nodes within dense coordinate grids.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolforge.edgeone.app/index.html" class="game-card" style="--card-accent:#d946ef" data-name="biometric forge neural draw">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="fingerprint" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">BIOMETRIC FORGE</div>
+                    <div class="card-desc">Neural signature replication. Draw and forge biometric patterns to bypass genetic firewalls.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocoloptics.edgeone.app/index.html" class="game-card" style="--card-accent:#ec4899" data-name="optics laser mirror bounce">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="zap" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">PROTOCOL OPTICS</div>
+                    <div class="card-desc">Laser refraction. Route data streams via optical mirrors to disable security arrays.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocoldecibel.edgeone.app/index.html" class="game-card" style="--card-accent:#0ea5e9" data-name="decibel audio wave sound">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="waves" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">DECIBEL</div>
+                    <div class="card-desc">Waveform sync. Clone encrypted audio patterns by modulating frequency, amplitude, and phase.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./colorhack.edgeone.app/index.html" class="game-card" style="--card-accent:#10b981" data-name="colorhack mastermind color firewall">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="palette" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">COLORHACK</div>
+                    <div class="card-desc">Mastermind decryption. Decipher color-sequence keys of corporate mainframes via logical deduction.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./hexdecrypt.edgeone.app/index.html" class="game-card" style="--card-accent:#10b981" data-name="hex decrypt breach binary code">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="binary" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">HEX DECRYPT</div>
+                    <div class="card-desc">Kernel breach. Navigate a live hex matrix to extract raw sequential codes before trace lock.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolglyph.edgeone.app/index.html" class="game-card" style="--card-accent:#38bdf8" data-name="glyph geometry coordinate hidden">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="search" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-online">ONLINE</span></div>
+                    <div class="card-title">PROTOCOL GLYPH</div>
+                    <div class="card-desc">Hidden geometry. A spatial reasoning protocol using coordinate scans to reveal passkeys.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolnexus.edgeone.app/index.html" class="game-card" style="--card-accent:#8b5cf6" data-name="nexus node wire connect network">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="network" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL NEXUS</div>
+                    <div class="card-desc">Node wiring. Connect all data terminals without crossing signal paths to complete the circuit.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolentropy.edgeone.app/index.html" class="game-card" style="--card-accent:#f59e0b" data-name="entropy sliding tile scramble puzzle">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="grid-3x3" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL ENTROPY</div>
+                    <div class="card-desc">Data fragmentation. Reassemble scrambled hex tile sequences into correct data-packet order.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolstatic.edgeone.app/index.html" class="game-card" style="--card-accent:#06b6d4" data-name="static nonogram picross pattern">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="radio" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL STATIC</div>
+                    <div class="card-desc">Signal recovery. Decode grid clues to reconstruct suppressed data transmissions from static noise.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- DECODE PROTOCOLS -->
+        <div class="section-label">DECODE_PROTOCOLS</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-16" id="decode-grid">
+
+            <a href="./protocolcipher.edgeone.app/index.html" class="game-card" style="--card-accent:#a3e635" data-name="cipher substitution decode alphabet letters">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="key-round" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL CIPHER</div>
+                    <div class="card-desc">Substitution cipher cracking. Map ciphertext to plaintext by pattern frequency analysis under time lock.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolbreach.edgeone.app/index.html" class="game-card" style="--card-accent:#10b981" data-name="breach binary mastermind guess bit">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="cpu" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL BREACH</div>
+                    <div class="card-desc">Binary Mastermind. Crack an 8-bit password by analyzing positional bit feedback across 6 attempts.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolmaze.edgeone.app/index.html" class="game-card" style="--card-accent:#f97316" data-name="maze navigate pathfind grid fog">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="map" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL MAZE</div>
+                    <div class="card-desc">Sector navigation. Traverse procedurally generated network mazes under fog-of-war conditions.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+            <a href="./protocolblackout.edgeone.app/index.html" class="game-card" style="--card-accent:#0ea5e9" data-name="blackout memory sequence simon">
+                <div class="card-top-bar"></div>
+                <div class="card-body">
+                    <div class="icon-box"><i data-lucide="brain" class="w-6 h-6"></i></div>
+                    <div><span class="status-tag status-new">NEW</span></div>
+                    <div class="card-title">PROTOCOL BLACKOUT</div>
+                    <div class="card-desc">Memory intrusion. Reproduce glyph sequences of increasing length flashed across secured node arrays.</div>
+                    <div class="btn-launch">INITIALIZE_LINK_</div>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- SPECIAL OPS -->
+        <div class="section-label">SPECIAL_OPS</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-16" id="special-grid">
+
+            <a href="./placeyourbets.edgeone.app/index.html" class="game-card casino-card" style="--card-accent:#eab308" data-name="casino royal neon slots roulette plinko blackjack mines">
+                <div class="card-top-bar" style="background: linear-gradient(90deg, #eab308 0%, transparent 70%);"></div>
+                <div class="card-body">
+                    <div class="icon-box" style="border-color: rgba(234,179,8,0.3); color:#eab308">
+                        <i data-lucide="diamond" class="w-6 h-6"></i>
+                    </div>
+                    <div><span class="status-tag status-casino">LIVE · 24H</span></div>
+                    <div class="card-title" style="color:#eab308">ROYAL NEON CASINO</div>
+                    <div class="card-desc">High-stakes wagering suite. Mines · Hi-Lo · Plinko · Mega Spin · Neon Roulette · Cyber Crash · Pro 21 · Power Ball.</div>
+                    <div class="btn-launch" style="border-color: rgba(234,179,8,0.3); color:#eab308">ENTER_CASINO_</div>
+                </div>
+            </a>
+
+            <a href="./doubledare.edgeone.app/index.html" class="game-card" style="--card-accent:#f59e0b" data-name="double dare party challenge multiplayer">
+                <div class="card-top-bar" style="background: linear-gradient(90deg, #f59e0b 0%, transparent 70%);"></div>
+                <div class="card-body">
+                    <div class="icon-box" style="border-color: rgba(245,158,11,0.3); color:#f59e0b">
+                        <i data-lucide="zap" class="w-6 h-6"></i>
+                    </div>
+                    <div><span class="status-tag status-online">STANDALONE</span></div>
+                    <div class="card-title">DOUBLE DARE</div>
+                    <div class="card-desc">Multiplayer party challenge engine. Issue dares, accept consequences, survive the voltage. Local co-op.</div>
+                    <div class="btn-launch" style="border-color: rgba(245,158,11,0.3); color:#f59e0b">INITIALIZE_DARE_</div>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- No results -->
+        <div id="no-results" class="hidden text-center py-20 text-slate-600 orbitron text-sm tracking-widest">
+            NO_PROTOCOL_FOUND // ADJUST_SEARCH_PARAMS
+        </div>
+
+    </main>
+
+    <footer class="relative z-10 w-full p-8 text-center text-[9px] text-slate-700 tracking-[0.5em] orbitron uppercase border-t border-violet-900/10">
+        © 2026 EDGEONE_CORP // <span id="game-count">14</span> PROTOCOLS_ACTIVE // NEURAL_LINK_STABLE
+    </footer>
+
+    <script>
+        lucide.createIcons();
+
+        // -------- Search --------
+        function filterCards(query) {
+            const q = query.toLowerCase().trim();
+            const cards = document.querySelectorAll('.game-card');
+            let visible = 0;
+            cards.forEach(card => {
+                const name = (card.dataset.name || '').toLowerCase();
+                const title = (card.querySelector('.card-title')?.textContent || '').toLowerCase();
+                if (!q || name.includes(q) || title.includes(q)) {
+                    card.classList.remove('hidden-card');
+                    visible++;
+                } else {
+                    card.classList.add('hidden-card');
+                }
+            });
+            document.getElementById('no-results').classList.toggle('hidden', visible > 0);
+        }
+
+        // -------- Particle Background --------
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const mouse = { x: -200, y: -200, radius: 160 };
+
+        class Particle {
+            constructor() { this.reset(true); }
+            reset(init = false) {
+                this.x = Math.random() * canvas.width;
+                this.y = init ? Math.random() * canvas.height : canvas.height + 5;
+                this.baseX = this.x;
+                this.baseY = this.y;
+                this.size = Math.random() * 1.2 + 0.4;
+                this.density = Math.random() * 35 + 5;
+                this.color = Math.random() > 0.5 ? '#8b5cf6' : '#0ea5e9';
+                this.alpha = Math.random() * 0.4 + 0.15;
+            }
+            draw() {
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            update() {
+                const dx = mouse.x - this.x, dy = mouse.y - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const force = Math.max(0, (mouse.radius - dist) / mouse.radius);
+                if (dist < mouse.radius) {
+                    this.x -= (dx / dist) * force * this.density * 0.5;
+                    this.y -= (dy / dist) * force * this.density * 0.5;
+                    this.alpha = Math.min(1, this.alpha + 0.05);
+                } else {
+                    this.x += (this.baseX - this.x) * 0.06;
+                    this.y += (this.baseY - this.y) * 0.06;
+                    this.alpha = Math.max(0.15, this.alpha - 0.008);
+                }
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const n = Math.floor((canvas.width * canvas.height) / 8000);
+            for (let i = 0; i < n; i++) particles.push(new Particle());
+        }
+
+        function connect() {
+            for (let a = 0; a < particles.length; a++) {
+                for (let b = a + 1; b < particles.length; b++) {
+                    const dx = particles[a].x - particles[b].x;
+                    const dy = particles[a].y - particles[b].y;
+                    const d = dx * dx + dy * dy;
+                    if (d < 12000) {
+                        const op = (1 - d / 12000) * 0.12;
+                        ctx.globalAlpha = op;
+                        ctx.strokeStyle = '#8b5cf6';
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[a].x, particles[a].y);
+                        ctx.lineTo(particles[b].x, particles[b].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1;
+            particles.forEach(p => { p.draw(); p.update(); });
+            connect();
+            ctx.globalAlpha = 1;
+            requestAnimationFrame(animate);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initParticles();
+        }
+
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('resize', resize);
+        resize();
+        animate();
+    </script>
+</body>
+</html>

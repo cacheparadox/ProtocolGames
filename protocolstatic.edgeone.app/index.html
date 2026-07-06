@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Static — Signal recovery via nonogram. Decode grid clues to reconstruct suppressed data transmissions.">
+    <title>ICE // Static Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📡</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --bg:#020b0e; --accent:#06b6d4; --accent-dim:rgba(6,182,212,0.15); --red:#ef4444; --grid-bg:#07121a; }
+        * { box-sizing:border-box; }
+        body { background:var(--bg); color:#d1d5db; font-family:'JetBrains Mono',monospace; margin:0; overflow-x:hidden; user-select:none; -webkit-tap-highlight-color:transparent; min-height:100vh; }
+        .orbitron { font-family:'Orbitron',sans-serif; }
+        .panel { background:var(--grid-bg); border:1px solid #0a2030; box-shadow:4px 4px 0 rgba(0,0,0,0.8); position:relative; }
+        .panel::before { content:''; position:absolute; top:0; left:0; width:10px; height:10px; border-top:2px solid var(--accent); border-left:2px solid var(--accent); }
+        .crt-overlay { position:fixed;inset:0;pointer-events:none;z-index:50;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.2) 50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.04));background-size:100% 2px,3px 100%; }
+        .modal-overlay { position:fixed;inset:0;background:rgba(2,11,14,0.97);backdrop-filter:blur(8px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px; }
+        .hidden { display:none!important; }
+
+        #nonogram-table { border-collapse:collapse; }
+
+        .clue-cell {
+            font-size: clamp(8px,2vw,12px);
+            font-weight: 700;
+            color: var(--accent);
+            padding: 2px 4px;
+            text-align: center;
+            vertical-align: bottom;
+            line-height: 1.3;
+            white-space: nowrap;
+        }
+        .clue-cell-row {
+            font-size: clamp(8px,2vw,12px);
+            font-weight: 700;
+            color: var(--accent);
+            padding: 2px 6px;
+            text-align: right;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .grid-cell {
+            width: clamp(24px,5.5vw,44px);
+            height: clamp(24px,5.5vw,44px);
+            background: #020b0e;
+            border: 1px solid #0a2030;
+            cursor: pointer;
+            transition: background 0.1s;
+            position: relative;
+        }
+        .grid-cell.filled {
+            background: var(--accent);
+            box-shadow: 0 0 8px rgba(6,182,212,0.4);
+        }
+        .grid-cell.marked {
+            background: #020b0e;
+        }
+        .grid-cell.marked::after {
+            content: '✕';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #1e4a5a;
+            font-size: 0.7em;
+            font-weight: 900;
+        }
+        .grid-cell.error { background: rgba(239,68,68,0.3) !important; box-shadow: 0 0 8px rgba(239,68,68,0.3); }
+        .grid-cell:hover:not(.filled):not(.marked) { background: var(--accent-dim); }
+        .grid-cell:active { transform: scale(0.9); }
+        .clue-correct { color: #10b981 !important; }
+        .five-border-right { border-right: 2px solid rgba(6,182,212,0.4) !important; }
+        .five-border-bottom { border-bottom: 2px solid rgba(6,182,212,0.4) !important; }
+
+        .mode-btn { padding:6px 14px; border-radius:6px; font-size:10px; font-family:'Orbitron',sans-serif; font-weight:900; letter-spacing:1px; cursor:pointer; border:1px solid; transition:all 0.2s; }
+        .mode-active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+        .mode-inactive { background:#020b0e; border-color:#0a2030; color:#374151; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full border-b border-cyan-900/30 p-3 sm:p-4 flex justify-between items-center z-10" style="background:#07121a">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-cyan-400 tracking-widest">PROTOCOL<span class="text-white">STATIC</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-cyan-900 tracking-[0.3em]">NONOGRAM // SIGNAL_RECOVERY</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex gap-2">
+                <button id="btn-fill" class="mode-btn mode-active" onclick="setMode('fill')">FILL</button>
+                <button id="btn-mark" class="mode-btn mode-inactive" onclick="setMode('mark')">✕ MARK</button>
+            </div>
+            <div class="text-right">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Puzzle</div>
+                <div id="puzzle-display" class="text-xl font-black text-white orbitron">01</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Progress bar -->
+    <div class="w-full h-1 bg-cyan-950/30">
+        <div id="progress-bar" class="h-full bg-cyan-500 transition-all duration-300" style="width:0%;box-shadow:0 0 6px #06b6d4"></div>
+    </div>
+
+    <main class="flex-1 flex flex-col items-center justify-center gap-6 p-4">
+
+        <div class="flex flex-col items-center gap-2">
+            <div id="puzzle-title" class="orbitron text-sm font-black text-cyan-400 tracking-widest"></div>
+            <div id="puzzle-hint" class="text-[10px] text-slate-500 text-center max-w-xs"></div>
+        </div>
+
+        <div class="overflow-auto max-w-full">
+            <table id="nonogram-table"></table>
+        </div>
+
+        <div class="flex gap-3 items-center">
+            <button onclick="checkSolution()" class="orbitron font-black text-xs tracking-widest text-black px-8 py-3 rounded" style="background:#06b6d4;box-shadow:0 0 15px rgba(6,182,212,0.3)">CHECK SIGNAL</button>
+            <button onclick="resetPuzzle()" class="orbitron text-[10px] text-slate-500 border border-slate-700 px-4 py-3 rounded hover:text-white transition-colors">RESET</button>
+        </div>
+
+        <div id="error-msg" class="text-[10px] text-red-400 orbitron tracking-widest hidden">SIGNAL MISMATCH — ERRORS HIGHLIGHTED</div>
+
+    </main>
+
+    <!-- Win Modal -->
+    <div id="win-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div class="text-5xl mb-4">📡</div>
+            <h2 class="orbitron text-2xl font-black text-cyan-400 mb-2">SIGNAL RESTORED</h2>
+            <p id="win-sub" class="text-[11px] text-slate-400 mb-2 tracking-widest"></p>
+            <p id="win-reveal" class="text-lg font-black text-white mb-8 orbitron tracking-[0.3em]"></p>
+            <div class="flex gap-3">
+                <button onclick="nextPuzzle()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-black rounded" style="background:#06b6d4">NEXT SIGNAL</button>
+                <button onclick="document.getElementById('win-modal').classList.add('hidden')" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-slate-400 bg-black border border-slate-700 rounded hover:text-white">REVIEW</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// PROTOCOL STATIC — Nonogram / Picross
+// Each puzzle defined as a 2D solution grid (1=filled, 0=empty)
+// ============================================================
+
+const PUZZLES = [
+    { title: 'CROSS', hint: 'A network junction', grid: [
+        [0,1,0,0,0],[0,1,0,0,0],[1,1,1,1,1],[0,1,0,0,0],[0,1,0,0,0]
+    ]},
+    { title: 'LOCK', hint: 'Encryption seal', grid: [
+        [0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,1],[1,1,1,1,1]
+    ]},
+    { title: 'ARROW', hint: 'Packet direction', grid: [
+        [0,0,1,0,0],[0,1,1,1,0],[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0]
+    ]},
+    { title: 'SIGNAL', hint: 'Active transmission', grid: [
+        [1,0,1,0,1],[1,0,1,0,1],[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0]
+    ]},
+    { title: 'DIAMOND', hint: 'Core data crystal', grid: [
+        [0,0,1,0,0],[0,1,1,1,0],[1,1,1,1,1],[0,1,1,1,0],[0,0,1,0,0]
+    ]},
+    { title: 'ZERO', hint: 'Empty register', grid: [
+        [0,1,1,1,0],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[0,1,1,1,0]
+    ]},
+    { title: 'FRAME', hint: 'Data packet border', grid: [
+        [1,1,1,1,1],[1,0,0,0,1],[1,0,0,0,1],[1,0,0,0,1],[1,1,1,1,1]
+    ]},
+    { title: 'ZIGZAG', hint: 'Error pulse pattern', grid: [
+        [1,1,0,0,0],[0,1,1,0,0],[0,0,1,1,0],[0,0,0,1,1],[0,0,0,0,1]
+    ]},
+    // 7x7 puzzles
+    { title: 'HEX', hint: 'Hexadecimal core', grid: [
+        [0,1,1,1,1,1,0],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[1,0,0,0,0,0,1],[0,1,1,1,1,1,0]
+    ]},
+    { title: 'ANTENNA', hint: 'Signal broadcast tower', grid: [
+        [0,0,0,1,0,0,0],[0,1,0,1,0,1,0],[0,0,0,1,0,0,0],[0,0,1,1,1,0,0],[0,0,0,1,0,0,0],[0,0,0,1,0,0,0],[0,1,1,1,1,1,0]
+    ]},
+    { title: 'STAR', hint: 'Navigation beacon', grid: [
+        [0,0,1,1,1,0,0],[0,0,0,1,0,0,0],[1,1,1,1,1,1,1],[0,0,0,1,0,0,0],[0,1,0,1,0,1,0],[0,0,0,1,0,0,0],[0,0,1,1,1,0,0]
+    ]},
+    { title: 'SKULL', hint: 'Firewall guardian', grid: [
+        [0,1,1,1,1,1,0],[1,0,0,1,0,0,1],[1,0,0,1,0,0,1],[0,1,1,1,1,1,0],[0,1,0,1,0,1,0],[0,1,1,0,1,1,0],[0,0,0,0,0,0,0]
+    ]},
+    // 9x9
+    { title: 'SHIELD', hint: 'Security barrier', grid: [
+        [0,1,1,1,1,1,1,1,0],[1,1,0,0,0,0,0,1,1],[1,0,1,0,0,0,1,0,1],[1,0,0,1,0,1,0,0,1],[1,0,0,0,1,0,0,0,1],[0,1,0,0,1,0,0,1,0],[0,0,1,0,1,0,1,0,0],[0,0,0,1,1,1,0,0,0],[0,0,0,0,1,0,0,0,0]
+    ]},
+    { title: 'GRID', hint: 'Network topology', grid: [
+        [1,0,1,0,1,0,1,0,1],[0,0,0,0,0,0,0,0,0],[1,0,1,0,1,0,1,0,1],[0,0,0,0,0,0,0,0,0],[1,0,1,0,1,0,1,0,1],[0,0,0,0,0,0,0,0,0],[1,0,1,0,1,0,1,0,1],[0,0,0,0,0,0,0,0,0],[1,0,1,0,1,0,1,0,1]
+    ]},
+    { title: 'DRAGON', hint: 'Apex intrusion agent', grid: [
+        [0,0,0,1,0,0,0,0,0],[0,0,1,0,1,0,0,0,0],[0,1,0,0,0,1,0,0,0],[1,1,1,0,1,1,1,0,0],[0,1,0,1,0,1,0,0,0],[0,0,1,0,1,0,0,0,0],[0,0,0,1,0,0,0,0,0],[0,0,0,0,1,0,0,0,0],[0,0,0,0,0,0,0,0,0]
+    ]},
+];
+
+let P = {
+    puzzleIdx: 0,
+    grid: [],
+    size: 0,
+    userGrid: [],
+    mode: 'fill',
+    dragging: false,
+    dragValue: null,
+};
+
+function setMode(m) {
+    P.mode = m;
+    document.getElementById('btn-fill').className = 'mode-btn ' + (m==='fill' ? 'mode-active' : 'mode-inactive');
+    document.getElementById('btn-mark').className = 'mode-btn ' + (m==='mark' ? 'mode-active' : 'mode-inactive');
+}
+
+function getClues(arr) {
+    const clues = [];
+    let run = 0;
+    arr.forEach(v => { if (v) run++; else if (run) { clues.push(run); run=0; } });
+    if (run) clues.push(run);
+    return clues.length ? clues : [0];
+}
+
+function loadPuzzle(idx) {
+    P.puzzleIdx = idx;
+    const puz = PUZZLES[idx % PUZZLES.length];
+    P.grid = puz.grid;
+    P.size = puz.grid.length;
+    P.userGrid = Array.from({length:P.size}, () => Array(P.size).fill(0)); // 0=empty, 1=filled, 2=marked
+    document.getElementById('puzzle-display').textContent = String(idx+1).padStart(2,'0');
+    document.getElementById('puzzle-title').textContent = `// ${puz.title}`;
+    document.getElementById('puzzle-hint').textContent = puz.hint;
+    document.getElementById('error-msg').classList.add('hidden');
+    document.getElementById('win-modal').classList.add('hidden');
+    document.getElementById('progress-bar').style.width = '0%';
+    renderTable();
+}
+
+function renderTable() {
+    const tbl = document.getElementById('nonogram-table');
+    tbl.innerHTML = '';
+    const sz = P.size;
+    const colClues = Array.from({length:sz}, (_,c) => getClues(P.grid.map(r=>r[c])));
+    const rowClues = P.grid.map(row => getClues(row));
+    const maxColH = Math.max(...colClues.map(c=>c.length));
+    const maxRowW = Math.max(...rowClues.map(r=>r.length));
+
+    // Column clue rows
+    for (let ci = 0; ci < maxColH; ci++) {
+        const tr = document.createElement('tr');
+        // Empty corner cells
+        for (let i = 0; i < maxRowW; i++) {
+            const td = document.createElement('td');
+            tr.appendChild(td);
+        }
+        for (let c = 0; c < sz; c++) {
+            const td = document.createElement('td');
+            td.className = 'clue-cell' + ((c+1)%5===0 ? ' five-border-right' : '');
+            const clue = colClues[c];
+            const offset = maxColH - clue.length;
+            td.textContent = ci >= offset ? clue[ci - offset] : '';
+            td.id = `cclue-${c}`;
+            tr.appendChild(td);
+        }
+        tbl.appendChild(tr);
+    }
+
+    // Grid rows
+    for (let r = 0; r < sz; r++) {
+        const tr = document.createElement('tr');
+        // Row clues
+        const clue = rowClues[r];
+        for (let i = 0; i < maxRowW; i++) {
+            const td = document.createElement('td');
+            td.className = 'clue-cell-row';
+            const offset = maxRowW - clue.length;
+            td.textContent = i >= offset ? clue[i - offset] : '';
+            if (i === maxRowW-1) td.id = `rclue-${r}`;
+            tr.appendChild(td);
+        }
+        for (let c = 0; c < sz; c++) {
+            const td = document.createElement('td');
+            td.className = 'grid-cell' + ((c+1)%5===0 ? ' five-border-right' : '') + ((r+1)%5===0 ? ' five-border-bottom' : '');
+            td.id = `cell-${r}-${c}`;
+            td.addEventListener('mousedown', e => { e.preventDefault(); startDrag(r,c); });
+            td.addEventListener('mouseenter', () => { if (P.dragging) doDrag(r,c); });
+            td.addEventListener('touchstart', e => { e.preventDefault(); startDrag(r,c); }, {passive:false});
+            td.addEventListener('touchmove', e => {
+                const t = e.touches[0];
+                const el = document.elementFromPoint(t.clientX, t.clientY);
+                if (el && el.id && el.id.startsWith('cell-')) {
+                    const [_,rr,cc] = el.id.split('-');
+                    doDrag(+rr,+cc);
+                }
+            }, {passive:false});
+            tr.appendChild(td);
+        }
+        tbl.appendChild(tr);
+    }
+    document.addEventListener('mouseup', () => { P.dragging=false; });
+    document.addEventListener('touchend', () => { P.dragging=false; });
+}
+
+function startDrag(r,c) {
+    P.dragging = true;
+    const cur = P.userGrid[r][c];
+    if (P.mode === 'fill') P.dragValue = cur===1 ? 0 : 1;
+    else P.dragValue = cur===2 ? 0 : 2;
+    setCellValue(r,c, P.dragValue);
+}
+
+function doDrag(r,c) {
+    if (!P.dragging) return;
+    setCellValue(r,c, P.dragValue);
+}
+
+function setCellValue(r,c,v) {
+    P.userGrid[r][c] = v;
+    const el = document.getElementById(`cell-${r}-${c}`);
+    if (!el) return;
+    el.className = el.className.replace(/ filled| marked| error/g,'');
+    if (v===1) el.classList.add('filled');
+    else if (v===2) el.classList.add('marked');
+    updateProgress();
+}
+
+function updateProgress() {
+    const total = P.size * P.size;
+    const filled = P.userGrid.flat().filter(v=>v===1).length;
+    const targetFilled = P.grid.flat().filter(v=>v===1).length;
+    const pct = Math.min(100, Math.round(filled / targetFilled * 100));
+    document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+function checkSolution() {
+    let errors = 0;
+    for (let r=0; r<P.size; r++) {
+        for (let c=0; c<P.size; c++) {
+            const el = document.getElementById(`cell-${r}-${c}`);
+            el.classList.remove('error');
+            const filled = P.userGrid[r][c]===1;
+            const shouldFill = P.grid[r][c]===1;
+            if (filled !== shouldFill) { el.classList.add('error'); errors++; }
+        }
+    }
+    if (errors===0) {
+        document.getElementById('error-msg').classList.add('hidden');
+        document.getElementById('win-sub').textContent = `PUZZLE ${P.puzzleIdx+1} SOLVED — ${P.size}×${P.size} GRID`;
+        document.getElementById('win-reveal').textContent = PUZZLES[P.puzzleIdx % PUZZLES.length].title;
+        document.getElementById('win-modal').classList.remove('hidden');
+        document.getElementById('progress-bar').style.width = '100%';
+    } else {
+        document.getElementById('error-msg').classList.remove('hidden');
+        document.getElementById('error-msg').textContent = `SIGNAL MISMATCH — ${errors} CELL${errors>1?'S':''} INCORRECT`;
+    }
+}
+
+function resetPuzzle() {
+    P.userGrid = Array.from({length:P.size}, () => Array(P.size).fill(0));
+    document.getElementById('error-msg').classList.add('hidden');
+    for (let r=0;r<P.size;r++) for (let c=0;c<P.size;c++) {
+        const el=document.getElementById(`cell-${r}-${c}`);
+        if(el) el.className = el.className.replace(/ filled| marked| error/g,'');
+    }
+    document.getElementById('progress-bar').style.width = '0%';
+}
+
+window.nextPuzzle = () => loadPuzzle(P.puzzleIdx+1);
+window.resetPuzzle = resetPuzzle;
+window.checkSolution = checkSolution;
+window.setMode = setMode;
+
+loadPuzzle(0);
+</script>
+</body>
+</html>
+

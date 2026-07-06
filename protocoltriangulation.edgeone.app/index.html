@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Triangulation — Spatial reasoning protocol. Intercept pings to triangulate hidden key nodes within dense coordinate grids.">
+    <title>PROTOCOL // Triangulation</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📍</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #05030a;
+            --term-violet: #8b5cf6;
+            --term-magenta: #d946ef;
+            --term-cyan: #0ea5e9;
+            --term-red: #ef4444;
+            --term-emerald: #10b981;
+            --term-warn: #eab308;
+            --grid-bg: #0b0714;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        .panel {
+            background: var(--grid-bg);
+            border: 1px solid #2e1065;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+            position: relative;
+            width: 100%;
+        }
+        
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid var(--term-cyan); border-left: 2px solid var(--term-cyan);
+        }
+
+        .board-wrapper {
+            background: #000;
+            border: 1px solid #0ea5e9;
+            position: relative;
+            border-radius: 4px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,1), 0 0 20px rgba(14, 165, 233, 0.1);
+            width: 100%;
+            aspect-ratio: 1;
+            max-width: 550px;
+            margin: 0 auto;
+        }
+
+        #grid-container {
+            display: grid;
+            width: 100%;
+            height: 100%;
+            gap: 1px;
+            background: rgba(14, 165, 233, 0.2);
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+        }
+
+        .node {
+            background: var(--bg);
+            cursor: crosshair;
+            transition: background 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: transparent;
+            position: relative;
+        }
+
+        .node:hover { background: #170f2e; }
+        .node.ping-wait { color: var(--term-violet); animation: pulse-text 0.5s infinite alternate; }
+        .node.pinged { color: var(--term-cyan); background: rgba(14, 165, 233, 0.1); text-shadow: 0 0 5px var(--term-cyan); }
+        .node.ping-error { color: var(--term-warn); background: rgba(234, 179, 8, 0.15); text-shadow: 0 0 5px var(--term-warn); }
+        .node.target-found { background: var(--term-emerald); color: black; animation: blink 0.5s infinite; }
+
+        canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+            background-size: 100% 2px, 3px 100%;
+        }
+        
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(5, 3, 10, 0.95); backdrop-filter: blur(8px);
+            z-index: 100; display: flex; align-items: center; justify-content: center;
+        }
+
+        #log-container { height: 150px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--term-cyan) transparent; }
+        #log-container::-webkit-scrollbar { width: 4px; }
+        #log-container::-webkit-scrollbar-thumb { background: var(--term-cyan); }
+
+        /* Hidden cheat triggers - no special styling */
+        .secret-trigger { cursor: default; }
+
+        #console-overlay {
+            position: fixed; bottom: -100%; left: 50%; transform: translateX(-50%);
+            width: 95%; max-width: 600px; height: 320px;
+            background: #000; border: 2px solid var(--term-magenta);
+            z-index: 200; padding: 20px; transition: bottom 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 50px rgba(217, 70, 239, 0.3);
+        }
+        #console-overlay.open { bottom: 20px; }
+
+        #console-input {
+            background: transparent; border: none; outline: none;
+            color: var(--term-magenta); width: 100%; font-family: inherit;
+        }
+
+        @keyframes pulse-text { from { opacity: 0.3; } to { opacity: 1; } }
+        @keyframes blink { 0%, 100% { background: var(--term-emerald); color: black; } 50% { background: var(--bg); color: var(--term-emerald); } }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full bg-[#0b0714] border-b border-cyan-900/30 p-3 sm:p-4 flex justify-between items-center z-10 shadow-lg">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-cyan-500 tracking-widest">PROTOCOL<span class="text-violet-400">TRIANGULATION</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-cyan-700 tracking-[0.3em]">ECHO_LOC // SPATIAL_MAP</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button onclick="toggleHelp()" class="orbitron font-black text-cyan-500 hover:text-white transition-colors border border-cyan-500/30 px-3 py-1 rounded text-sm bg-cyan-500/10">
+                [ ? ]
+            </button>
+            <div class="text-right flex flex-col items-end gap-1">
+                <div class="text-[8px] sm:text-[10px] uppercase text-slate-500 tracking-widest mb-0.5">Rank</div>
+                <div id="level-display" class="text-xl sm:text-2xl font-black text-white orbitron leading-none">01</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-8 p-3 sm:p-6 max-w-7xl mx-auto w-full z-10">
+        <div class="w-full lg:w-1/3 space-y-4 lg:space-y-6 flex flex-col">
+            <div class="panel p-4 sm:p-6">
+                <div class="flex justify-between items-end mb-3 border-b border-slate-800 pb-2">
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">System Status</h2>
+                    <span id="rank-name" class="text-[10px] sm:text-xs font-black text-cyan-400">SCRIPT KIDDIE</span>
+                </div>
+                <div class="grid grid-cols-1 gap-4 mt-4 text-xs sm:text-sm">
+                    <div class="bg-black p-3 border border-slate-800 rounded flex flex-col items-center">
+                        <span class="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Grid Size</span>
+                        <span id="grid-dim" class="font-bold text-white orbitron">6x6</span>
+                    </div>
+                </div>
+                <div class="mt-6 border-t border-slate-800 pt-4">
+                    <div class="flex justify-between items-center text-xs mb-2">
+                        <span class="text-slate-500 uppercase tracking-widest text-[10px]">Pings Used</span>
+                        <span class="font-bold text-cyan-400 orbitron text-lg"><span id="ping-count">0</span></span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-900 rounded overflow-hidden relative">
+                        <div id="par-marker" class="absolute top-0 bottom-0 w-1 bg-emerald-500 z-10"></div>
+                        <div id="max-marker" class="absolute top-0 bottom-0 w-1 bg-red-500 z-10" style="left: 100%;"></div>
+                        <div id="ping-bar" class="h-full bg-cyan-500 transition-all duration-300 w-0"></div>
+                    </div>
+                    <div class="flex justify-between text-[8px] text-slate-600 uppercase tracking-widest mt-1 font-bold">
+                        <span>0</span>
+                        <span class="text-emerald-500">PAR <span id="par-val">4</span></span>
+                        <span class="text-red-500">MAX <span id="max-val">6</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel p-4 flex-1 flex flex-col border-cyan-900/50">
+                <h2 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 border-b border-slate-800 pb-2">Traffic Log</h2>
+                <div id="log-container" class="text-[10px] sm:text-xs font-mono text-cyan-500 flex-1"></div>
+            </div>
+            <button onclick="window.abortHack()" class="text-[9px] sm:text-[10px] text-slate-500 hover:text-red-500 uppercase tracking-[0.5em] transition-colors font-bold p-2 border border-slate-800 rounded text-center w-full">Disconnect Protocol</button>
+        </div>
+        <div class="w-full lg:w-2/3 flex flex-col items-center justify-center">
+            <div class="board-wrapper" id="board-wrapper">
+                <div id="grid-container"></div>
+                <canvas id="sonar-canvas"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="help-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-cyan-500 mx-4">
+            <h2 class="orbitron text-xl font-black text-cyan-500 mb-4">SYSTEM DOCUMENTATION</h2>
+            <div class="text-[11px] text-slate-400 space-y-4 mb-8 leading-relaxed">
+                <p>Establishing a connection to a secure <span class="secret-trigger" onclick="secretPress('node')">node</span> requires precise spatial triangulation.</p>
+                <p>Each ping creates an echo from the source. You must <span class="secret-trigger" onclick="secretPress('triangulate')">triangulate</span> based on the return latency measured in milliseconds.</p>
+                <p>A high-speed <span class="secret-trigger" onclick="secretPress('relay')">relay</span> will visualize the signal travel path.</p>
+                <div class="border-t border-slate-800 pt-4">
+                    <p class="text-emerald-500 font-bold mb-1">STRATEGY:</p>
+                    <p>Three pings create three circles. The point where all circles intersect is your target. Use logic to minimize packet counts. Note: Crashed nodes that fail to return data do not count towards your traffic limit.</p>
+                </div>
+            </div>
+            <button onclick="toggleHelp()" class="w-full bg-slate-800 py-3 rounded uppercase font-bold text-xs">Close Manual</button>
+        </div>
+    </div>
+
+    <div id="threat-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-red-500 mx-4 text-center">
+            <h2 id="threat-title" class="orbitron text-xl font-black text-red-500 mb-2">NETWORK ANOMALY</h2>
+            <p id="threat-desc" class="text-xs text-slate-400 mb-6"></p>
+            <button onclick="closeThreat()" class="w-full bg-red-600 py-3 rounded uppercase font-bold text-xs text-white">ACKNOWLEDGE</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full text-center border-t-4 mx-4">
+            <h2 id="result-title" class="orbitron text-2xl font-black mb-2"></h2>
+            <p id="result-sub" class="text-xs text-slate-400 mb-6 uppercase tracking-widest"></p>
+            <div class="bg-black border border-slate-800 p-4 rounded mb-6 text-left">
+                <div class="flex justify-between text-xs mb-2"><span>Pings:</span><span id="result-pings" class="font-bold text-white orbitron"></span></div>
+                <div class="flex justify-between text-xs"><span>Status:</span><span id="result-eval" class="font-bold orbitron"></span></div>
+            </div>
+            <button id="result-btn" onclick="window.initLevel()" class="w-full font-black py-4 rounded uppercase tracking-widest transition-colors"></button>
+        </div>
+    </div>
+
+    <!-- Override Terminal -->
+    <div id="console-overlay">
+        <div class="flex justify-between items-center mb-2 border-b border-magenta-500 pb-1">
+            <span class="orbitron text-xs text-magenta-500 font-bold tracking-widest">OVERRIDE_CONSOLE // V3.1</span>
+            <span class="text-[10px] text-magenta-800">KERNEL_OVERRIDE_ACTIVE</span>
+        </div>
+        <div id="console-history" class="text-[10px] font-mono text-magenta-400 h-[220px] overflow-y-auto mb-2 opacity-80">
+            <div>> WELCOME, OPERATOR.</div>
+            <div>> TYPE 'HELP' FOR SYSTEM HACKS.</div>
+        </div>
+        <div class="flex text-magenta-500 font-bold">
+            <span class="mr-2">></span>
+            <input type="text" id="console-input" autofocus spellcheck="false" autocomplete="off">
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const RANKS = [
+                { name: "SCRIPT KIDDIE", size: 6, par: 4, max: 6, loss: 0, jitter: 0 },
+                { name: "PACKETEER", size: 8, par: 4, max: 7, loss: 0, jitter: 0 },
+                { name: "SYSADMIN", size: 10, par: 5, max: 8, loss: 0, jitter: 0 },
+                { name: "WHITE HAT", size: 12, par: 5, max: 8, loss: 0.10, jitter: 0 },
+                { name: "PEN-TESTER", size: 15, par: 6, max: 9, loss: 0.15, jitter: 0.5 },
+                { name: "GREY HAT", size: 18, par: 6, max: 10, loss: 0.20, jitter: 1.0 },
+                { name: "BLACK HAT", size: 20, par: 7, max: 11, loss: 0.25, jitter: 1.5 },
+                { name: "ZERO-DAY", size: 22, par: 7, max: 12, loss: 0.30, jitter: 2.0 },
+                { name: "GHOST", size: 24, par: 8, max: 13, loss: 0.35, jitter: 2.5 },
+                { name: "ANONYMOUS", size: 25, par: 8, max: 14, loss: 0.40, jitter: 3.0 }
+            ];
+
+            let state = {
+                level: 0,
+                target: { x: 0, y: 0 },
+                pings: 0,
+                gameOver: false,
+                isWaitingForPing: false,
+                ripples: [],
+                pingHistory: [],
+                cheats: { showPings: false, overrideConn: false, ghostMode: false },
+                secretIdx: 0,
+                threatsShown: new Set()
+            };
+
+            const SECRET_SEQ = ['node', 'relay', 'triangulate'];
+            const gridEl = document.getElementById('grid-container');
+            const logEl = document.getElementById('log-container');
+            const canvas = document.getElementById('sonar-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            function resize() {
+                const wrapper = document.getElementById('board-wrapper');
+                const rect = wrapper.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = rect.height * window.devicePixelRatio;
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                canvas.style.width = `${rect.width}px`;
+                canvas.style.height = `${rect.height}px`;
+            }
+            window.addEventListener('resize', resize);
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const w = canvas.clientWidth;
+                const h = canvas.clientHeight;
+                const cellSize = w / RANKS[state.level].size;
+
+                if (state.cheats.showPings) {
+                    state.pingHistory.forEach(p => {
+                        ctx.beginPath();
+                        ctx.strokeStyle = 'rgba(217, 70, 239, 0.4)';
+                        ctx.setLineDash([5, 5]);
+                        ctx.lineWidth = 1;
+                        ctx.arc(p.cx, p.cy, p.dist * cellSize, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    });
+                }
+
+                for (let i = state.ripples.length - 1; i >= 0; i--) {
+                    let r = state.ripples[i];
+                    r.radius += r.speed; r.alpha -= r.decay;
+                    if (r.alpha <= 0) { state.ripples.splice(i, 1); continue; }
+                    ctx.beginPath();
+                    ctx.strokeStyle = `rgba(${r.color}, ${r.alpha})`;
+                    ctx.lineWidth = r.isSuccess ? 4 : 2;
+                    const draws = [[r.x, r.y], [-r.x, r.y], [2*w - r.x, r.y], [r.x, -r.y], [r.x, 2*h - r.y]];
+                    draws.forEach(pos => { ctx.moveTo(pos[0] + r.radius, pos[1]); ctx.arc(pos[0], pos[1], r.radius, 0, Math.PI * 2); });
+                    ctx.stroke();
+                }
+                requestAnimationFrame(animate);
+            }
+            requestAnimationFrame(animate);
+
+            window.initLevel = () => {
+                document.getElementById('result-modal').classList.add('hidden');
+                const lvlData = RANKS[state.level];
+                
+                if (lvlData.loss > 0 && !state.threatsShown.has('loss')) {
+                    showThreat('NODE CRASHES', 'Network nodes are crashing. Failed signal relays will not impact your packet count.');
+                    state.threatsShown.add('loss');
+                } else if (lvlData.jitter > 0 && !state.threatsShown.has('jitter')) {
+                    showThreat('SIGNAL JITTER', 'Latency fluctuation detected. Exact distance measurements are no longer guaranteed.');
+                    state.threatsShown.add('jitter');
+                }
+
+                state.target = { x: Math.floor(Math.random() * lvlData.size), y: Math.floor(Math.random() * lvlData.size) };
+                state.pings = 0; state.gameOver = false; state.ripples = []; state.pingHistory = [];
+                
+                document.getElementById('level-display').innerText = (state.level + 1).toString().padStart(2, '0');
+                document.getElementById('rank-name').innerText = lvlData.name;
+                document.getElementById('grid-dim').innerText = `${lvlData.size}x${lvlData.size}`;
+                document.getElementById('ping-count').innerText = '0';
+                document.getElementById('par-val').innerText = lvlData.par;
+                document.getElementById('max-val').innerText = lvlData.max;
+                document.getElementById('par-marker').style.left = `${(lvlData.par / lvlData.max) * 100}%`;
+                updatePingBar(0, lvlData.max, lvlData.par);
+
+                gridEl.innerHTML = '';
+                gridEl.style.gridTemplateColumns = `repeat(${lvlData.size}, 1fr)`;
+                const fontSize = Math.max(7, 18 - (lvlData.size * 0.4));
+                
+                for (let y = 0; y < lvlData.size; y++) {
+                    for (let x = 0; x < lvlData.size; x++) {
+                        const node = document.createElement('div');
+                        node.classList.add('node');
+                        node.style.fontSize = `${fontSize}px`;
+                        node.addEventListener('click', () => handleNodeClick(x, y, node, lvlData));
+                        gridEl.appendChild(node);
+                    }
+                }
+                logEl.innerHTML = ''; resize();
+            };
+
+            function handleNodeClick(x, y, el, lvlData) {
+                if (state.gameOver || state.isWaitingForPing) return;
+                if (el.classList.contains('pinged') || el.classList.contains('ping-error')) return;
+
+                const exactDist = Math.hypot(x - state.target.x, y - state.target.y);
+                const wrapperRect = document.getElementById('board-wrapper').getBoundingClientRect();
+                const nodeRect = el.getBoundingClientRect();
+                const cx = (nodeRect.left - wrapperRect.left) + nodeRect.width / 2;
+                const cy = (nodeRect.top - wrapperRect.top) + nodeRect.height / 2;
+                const isTarget = (x === state.target.x && y === state.target.y);
+
+                state.ripples.push({ x: cx, y: cy, radius: 10, alpha: 1, decay: 0.015, speed: 4, color: isTarget ? '16, 185, 129' : '14, 165, 233', isSuccess: isTarget });
+                state.isWaitingForPing = true; el.classList.add('ping-wait'); el.innerText = '...';
+                
+                setTimeout(() => {
+                    el.classList.remove('ping-wait'); state.isWaitingForPing = false;
+                    
+                    if (isTarget) {
+                        state.pings++; // Target find always counts as a ping
+                        updateUIPings(lvlData);
+                        el.classList.add('target-found'); el.innerText = 'KEY';
+                        state.gameOver = true;
+                        showResult(state.pings <= lvlData.par ? 'advance' : (state.pings <= lvlData.max ? 'stay' : 'derank'));
+                        return;
+                    }
+
+                    // Handle Node Crash (Packet Loss)
+                    if (Math.random() < lvlData.loss && !state.cheats.overrideConn) {
+                        el.classList.add('ping-error'); el.innerText = 'X';
+                        addLog(`> NODE [${x},${y}] : CRASHED - NO DATA`, 'err');
+                    } else {
+                        // Successful Relay
+                        state.pings++;
+                        updateUIPings(lvlData);
+                        let dist = exactDist;
+                        if (lvlData.jitter > 0 && !state.cheats.overrideConn) dist += (Math.random() * lvlData.jitter * 2) - lvlData.jitter;
+                        dist = Math.max(0.1, dist);
+                        el.classList.add('pinged'); el.innerText = dist.toFixed(2);
+                        state.pingHistory.push({ cx, cy, dist });
+                        addLog(`> PING [${x},${y}] : ${dist.toFixed(2)}ms`);
+                    }
+
+                    if (state.pings >= lvlData.max && !state.cheats.ghostMode) { state.gameOver = true; showResult('derank'); }
+                }, isTarget ? 300 : Math.min(1000, exactDist * 80 + 200));
+            }
+
+            function updateUIPings(lvlData) {
+                document.getElementById('ping-count').innerText = state.pings;
+                updatePingBar(state.pings, lvlData.max, lvlData.par);
+            }
+
+            function updatePingBar(pings, max, par) {
+                const bar = document.getElementById('ping-bar');
+                const percent = Math.min(100, (pings / max) * 100);
+                bar.style.width = `${percent}%`;
+                bar.className = `h-full transition-all duration-300 ${pings <= par ? 'bg-cyan-500' : (pings <= max ? 'bg-yellow-500' : 'bg-red-600')}`;
+            }
+
+            function addLog(msg, type = 'normal') {
+                const div = document.createElement('div'); div.className = `log-entry ${type === 'err' ? 'text-red-500 opacity-100' : ''}`;
+                div.innerHTML = msg; logEl.appendChild(div); logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            function showResult(action) {
+                const mod = document.getElementById('result-modal');
+                const title = document.getElementById('result-title');
+                const btn = document.getElementById('result-btn');
+                mod.classList.remove('hidden');
+                document.getElementById('result-pings').innerText = state.pings;
+                const eVal = document.getElementById('result-eval');
+                
+                if (action === 'advance') {
+                    title.innerText = "ACCESS GRANTED"; title.style.color = '#10b981';
+                    eVal.innerText = "OPTIMAL"; eVal.style.color = '#10b981';
+                    btn.innerText = "PROCEED"; btn.className = "w-full bg-emerald-600 py-4 font-black";
+                    state.level++;
+                } else if (action === 'stay') {
+                    title.innerText = "NODE ACCESSED"; title.style.color = '#eab308';
+                    eVal.innerText = "SUB-OPTIMAL"; eVal.style.color = '#eab308';
+                    btn.innerText = "RE-ATTEMPT"; btn.className = "w-full bg-yellow-600 py-4 font-black text-black";
+                } else {
+                    title.innerText = "TRACE DETECTED"; title.style.color = '#ef4444';
+                    eVal.innerText = "TERMINATED"; eVal.style.color = '#ef4444';
+                    btn.innerText = "REBOOT"; btn.className = "w-full bg-red-800 py-4 font-black";
+                    state.level = Math.max(0, state.level - 1);
+                }
+            }
+
+            window.toggleHelp = () => document.getElementById('help-modal').classList.toggle('hidden');
+            window.showThreat = (title, desc) => {
+                document.getElementById('threat-modal').classList.remove('hidden');
+                document.getElementById('threat-title').innerText = title;
+                document.getElementById('threat-desc').innerText = desc;
+            };
+            window.closeThreat = () => document.getElementById('threat-modal').classList.add('hidden');
+            
+            window.secretPress = (word) => {
+                if (word === SECRET_SEQ[state.secretIdx]) {
+                    state.secretIdx++;
+                    if (state.secretIdx >= SECRET_SEQ.length) {
+                        document.getElementById('console-overlay').classList.add('open');
+                        document.getElementById('help-modal').classList.add('hidden');
+                        document.getElementById('console-input').focus();
+                        state.secretIdx = 0;
+                    }
+                } else state.secretIdx = 0;
+            };
+
+            const conInput = document.getElementById('console-input');
+            const conHist = document.getElementById('console-history');
+            conInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const cmd = conInput.value.toLowerCase().trim();
+                    const log = (m) => { conHist.innerHTML += `<div>> ${m}</div>`; conHist.scrollTop = conHist.scrollHeight; };
+                    log(cmd); conInput.value = '';
+
+                    if (cmd === 'help') log('CMDS: SHOWPINGS, UPGRADELEVEL, UPGRADECONN, PINGPARDON, GHOSTMODE, CLEAR, RESETALL, EXIT');
+                    else if (cmd === 'showpings') { state.cheats.showPings = !state.cheats.showPings; log(`VISUALS: ${state.cheats.showPings}`); }
+                    else if (cmd === 'upgradelevel') { state.level = Math.min(9, state.level + 1); window.initLevel(); log(`LVL UP: ${state.level + 1}`); }
+                    else if (cmd === 'upgradeconn') { state.cheats.overrideConn = true; log('CONN SECURED: JITTER/LOSS NULLIFIED'); }
+                    else if (cmd === 'pingpardon') { state.pings = 0; updateUIPings(RANKS[state.level]); log('PINGS CLEARED'); }
+                    else if (cmd === 'ghostmode') { state.cheats.ghostMode = !state.cheats.ghostMode; log(`GHOSTMODE: ${state.cheats.ghostMode}`); }
+                    else if (cmd === 'clear') { conHist.innerHTML = ''; }
+                    else if (cmd === 'resetall') { 
+                        state.cheats = { showPings: false, overrideConn: false, ghostMode: false }; 
+                        log('ALL OVERRIDES DISABLED'); 
+                    }
+                    else if (cmd === 'exit') document.getElementById('console-overlay').classList.remove('open');
+                    else log('ERR: UNKNOWN CMD');
+                }
+            });
+
+            window.initLevel();
+        })();
+    </script>
+</body>
+</html>

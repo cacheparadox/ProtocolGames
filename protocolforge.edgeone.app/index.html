@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Biometric Forge — Neural signature replication. Draw and forge biometric patterns to bypass high-security genetic firewalls.">
+    <title>ICE // Biometric Forge</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #05030a;
+            --term-violet: #8b5cf6;
+            --term-magenta: #d946ef;
+            --term-cyan: #0ea5e9;
+            --term-red: #ef4444;
+            --term-emerald: #10b981;
+            --grid-bg: #0b0714;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Brutalist Corporate Styling */
+        .panel {
+            background: var(--grid-bg);
+            border: 1px solid #2e1065;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+            position: relative;
+            width: 100%;
+        }
+        
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid var(--term-magenta); border-left: 2px solid var(--term-magenta);
+        }
+
+        /* Canvas Container */
+        .canvas-wrapper {
+            background: #000;
+            border: 1px solid #3b0764;
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,1);
+            width: 100%;
+            aspect-ratio: 1;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .canvas-wrapper::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: 
+                linear-gradient(rgba(139, 92, 246, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.1) 1px, transparent 1px);
+            background-size: 25px 25px;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Prevents scrolling while drawing */
+        }
+
+        /* Scanline Overlay */
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+            background-size: 100% 2px, 3px 100%;
+        }
+
+        .trace-bar {
+            height: 4px;
+            background: var(--term-violet);
+            width: 100%;
+            transition: width 1s linear;
+            box-shadow: 0 0 10px var(--term-violet);
+        }
+        
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(5, 3, 10, 0.95); backdrop-filter: blur(8px);
+            z-index: 100; display: flex; align-items: center; justify-content: center;
+        }
+
+        .score-circle {
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            margin: 0 auto 20px auto;
+            border: 4px solid var(--term-violet);
+            box-shadow: 0 0 30px rgba(139, 92, 246, 0.3);
+            background: #000;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <!-- Top Bar -->
+    <header class="w-full bg-[#0b0714] border-b border-violet-900/30 p-3 sm:p-4 flex justify-between items-center z-10 shadow-lg">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-violet-500 tracking-widest">BIOMETRIC<span style="color:#d946ef">FORGE</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-violet-700 tracking-[0.3em]">NEURAL_SIG // REPLICATION</div>
+            </div>
+        </div>
+        <div class="text-right flex flex-col items-end gap-1">
+            <div class="text-[8px] sm:text-[10px] uppercase text-slate-500 tracking-widest mb-0.5">Clearance</div>
+            <div id="level-display" class="text-xl sm:text-2xl font-black text-white orbitron leading-none">01</div>
+        </div>
+    </header>
+
+    <div id="trace-container" class="w-full bg-violet-950/20 h-1 z-10 hidden">
+        <div id="trace-bar" class="trace-bar"></div>
+    </div>
+
+    <!-- Main Interface -->
+    <main class="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-8 p-3 sm:p-6 max-w-6xl mx-auto w-full z-10">
+        
+        <!-- Left Sidebar -->
+        <div class="w-full lg:w-1/3 space-y-4 lg:space-y-6 flex flex-col justify-center">
+            
+            <div class="panel p-4 sm:p-6">
+                <div class="flex justify-between items-end mb-3 border-b border-slate-800 pb-2">
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">System Status</h2>
+                    <span id="status-display" class="text-[10px] sm:text-xs font-black text-violet-500 animate-pulse">STANDBY</span>
+                </div>
+                <p id="instruction-text" class="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-widest leading-relaxed">
+                    Awaiting initialization...
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-auto lg:mt-0" id="controls-container">
+                <button onclick="window.clearTrace()" id="btn-clear" class="bg-slate-900 hover:bg-slate-800 text-slate-400 text-[10px] sm:text-xs font-bold py-4 rounded uppercase tracking-widest transition-colors border border-slate-700 opacity-50 pointer-events-none">Clear Data</button>
+                <button onclick="window.analyzeTrace()" id="btn-analyze" class="bg-violet-600 hover:bg-violet-500 text-white text-[10px] sm:text-xs font-black py-4 rounded uppercase tracking-widest transition-colors border border-violet-500 shadow-[0_0_15px_rgba(139,92,246,0.3)] opacity-50 pointer-events-none">Inject Spoof</button>
+            </div>
+            
+            <button onclick="window.abortHack()" class="mt-4 text-[9px] sm:text-[10px] text-slate-500 hover:text-red-500 uppercase tracking-[0.5em] transition-colors font-bold p-2 border border-slate-800 rounded hover:border-red-500/50 hover:bg-red-500/10 text-center w-full">
+                Disconnect Protocol
+            </button>
+
+        </div>
+
+        <!-- Right Board -->
+        <div class="w-full lg:w-2/3 flex flex-col items-center justify-center mt-2 lg:mt-0">
+            <div class="panel p-3 sm:p-6 w-full max-w-[600px] border-slate-700 flex justify-center items-center">
+                <div class="canvas-wrapper">
+                    <canvas id="trace-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-violet-500 mx-4 shadow-2xl shadow-violet-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black text-violet-500 mb-2">BIOMETRIC FORGE</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>The firewall is secured via a dynamic neural signature. You must bypass it by forging the target's biometric profile.</p>
+                <ul class="list-disc pl-4 space-y-2 text-slate-300">
+                    <li>The target's <span class="text-violet-400 font-bold">neural pattern</span> will briefly flash on your terminal. Memorize it.</li>
+                    <li>Once it fades, use your cursor/finger to <span class="text-cyan-400 font-bold">forge the exact pattern</span>.</li>
+                    <li>Position, scale, and shape must perfectly mimic the original.</li>
+                    <li>A replication accuracy of <b class="text-emerald-400">75%</b> or higher is required to spoof the node.</li>
+                </ul>
+            </div>
+            <button onclick="window.initVectorTrace()" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base">INITIATE FORGE</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full text-center border-t-4 mx-4 shadow-2xl" id="result-box">
+            <h2 id="result-title" class="orbitron text-2xl sm:text-3xl font-black mb-2"></h2>
+            <p id="result-sub" class="text-xs sm:text-sm mb-6 uppercase tracking-widest text-slate-400"></p>
+            
+            <div class="score-circle" id="score-circle">
+                <div class="text-xs text-slate-400 uppercase tracking-widest mb-1">Accuracy</div>
+                <div id="score-val" class="orbitron text-4xl font-black text-white">0%</div>
+            </div>
+
+            <button id="result-btn" onclick="window.initVectorTrace()" class="w-full font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base"></button>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-3 bg-violet-500 text-white font-black text-[10px] tracking-widest uppercase rounded-full transition-all duration-300 opacity-0 translate-y-10 z-[2000] shadow-xl pointer-events-none"></div>
+
+    <script>
+        (function() {
+            let state = {
+                level: 1,
+                status: 'idle', // idle, memorize, trace, analyzing
+                targetShape: [], // Normalized points {x: 0-1, y: 0-1}
+                userTrace: [], // Raw canvas points
+                isDrawing: false,
+                timeLeft: 0,
+                timerId: null
+            };
+
+            const canvas = document.getElementById('trace-canvas');
+            const ctx = canvas.getContext('2d');
+
+            function resizeCanvas() {
+                const wrapper = canvas.parentElement;
+                // Handle high DPI displays for crisp lines
+                const rect = wrapper.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = rect.height * window.devicePixelRatio;
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                canvas.style.width = `${rect.width}px`;
+                canvas.style.height = `${rect.height}px`;
+                
+                if (state.status === 'memorize') drawTargetShape();
+                if (state.status === 'trace') drawUserTrace();
+            }
+            window.addEventListener('resize', resizeCanvas);
+
+            window.abortHack = () => {
+                state.level = 1;
+                state.status = 'idle';
+                clearInterval(state.timerId);
+                document.getElementById('result-modal').classList.add('hidden');
+                document.getElementById('intro-modal').classList.remove('hidden');
+                document.getElementById('trace-container').classList.add('hidden');
+                ctx.clearRect(0,0,canvas.width, canvas.height);
+            };
+
+            window.initVectorTrace = () => {
+                document.getElementById('intro-modal').classList.add('hidden');
+                document.getElementById('result-modal').classList.add('hidden');
+                
+                // Difficulty scales vertex count and complexity
+                let vertices = 3 + Math.floor(state.level / 2);
+                if (vertices > 8) vertices = 8;
+                
+                generateTargetShape(vertices);
+                
+                state.userTrace = [];
+                state.status = 'memorize';
+                state.timeLeft = Math.max(1.5, 4.0 - (state.level * 0.3)); // Less time as you progress
+                
+                document.getElementById('level-display').innerText = state.level.toString().padStart(2, '0');
+                document.getElementById('status-display').innerText = 'INTERCEPTING';
+                document.getElementById('status-display').className = 'text-[10px] sm:text-xs font-black text-violet-500 animate-pulse';
+                document.getElementById('instruction-text').innerText = 'Analyzing target neural signature. Memorize it.';
+                
+                // Disable trace buttons
+                document.getElementById('btn-clear').classList.add('opacity-50', 'pointer-events-none');
+                document.getElementById('btn-analyze').classList.add('opacity-50', 'pointer-events-none');
+
+                resizeCanvas();
+                drawTargetShape();
+                startMemorizeTimer();
+            };
+
+            function generateTargetShape(numVertices) {
+                state.targetShape = [];
+                let angles = [];
+                for(let i=0; i<numVertices; i++) {
+                    angles.push((Math.PI * 2 * i) / numVertices + (Math.random() * 0.5 - 0.25));
+                }
+                
+                // For level > 3, we can shuffle angles to create intersecting lines (stars) instead of polygons
+                if(state.level > 3 && Math.random() > 0.5) {
+                    angles.sort(() => Math.random() - 0.5);
+                }
+
+                for(let i=0; i<numVertices; i++) {
+                    // FIX: Constrained radius to a max of 0.45.
+                    // Since center is 0.5, this guarantees the shape points will always fall
+                    // between 0.05 and 0.95, keeping it perfectly inside the canvas box.
+                    let r = 0.20 + (Math.random() * 0.25); 
+                    let x = 0.5 + Math.cos(angles[i]) * r;
+                    let y = 0.5 + Math.sin(angles[i]) * r;
+                    state.targetShape.push({x, y});
+                }
+                // Close the loop
+                state.targetShape.push({x: state.targetShape[0].x, y: state.targetShape[0].y});
+            }
+
+            function startMemorizeTimer() {
+                document.getElementById('trace-container').classList.remove('hidden');
+                let maxTime = state.timeLeft;
+                
+                clearInterval(state.timerId);
+                state.timerId = setInterval(() => {
+                    state.timeLeft -= 0.05;
+                    let percent = (state.timeLeft / maxTime) * 100;
+                    document.getElementById('trace-bar').style.width = `${Math.max(0, percent)}%`;
+
+                    if(state.timeLeft <= 0) {
+                        clearInterval(state.timerId);
+                        startTracingPhase();
+                    }
+                }, 50);
+            }
+
+            function startTracingPhase() {
+                state.status = 'trace';
+                ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+                document.getElementById('trace-container').classList.add('hidden');
+                
+                document.getElementById('status-display').innerText = 'AWAITING INPUT';
+                document.getElementById('status-display').className = 'text-[10px] sm:text-xs font-black text-cyan-400';
+                document.getElementById('instruction-text').innerText = 'Input spoofed biometric pattern.';
+                
+                document.getElementById('btn-clear').classList.remove('opacity-50', 'pointer-events-none');
+                document.getElementById('btn-analyze').classList.remove('opacity-50', 'pointer-events-none');
+            }
+
+            // --- CANVAS DRAWING LOGIC ---
+
+            function getMousePos(evt) {
+                const rect = canvas.getBoundingClientRect();
+                let clientX = evt.clientX;
+                let clientY = evt.clientY;
+
+                if (evt.touches && evt.touches.length > 0) {
+                    clientX = evt.touches[0].clientX;
+                    clientY = evt.touches[0].clientY;
+                }
+
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            function startDraw(e) {
+                if(state.status !== 'trace') return;
+                e.preventDefault();
+                state.isDrawing = true;
+                state.userTrace.push([]); // Start a new stroke path
+                addPoint(e);
+            }
+
+            function moveDraw(e) {
+                if(!state.isDrawing || state.status !== 'trace') return;
+                e.preventDefault();
+                addPoint(e);
+            }
+
+            function stopDraw(e) {
+                if(state.status !== 'trace') return;
+                e.preventDefault();
+                state.isDrawing = false;
+            }
+
+            function addPoint(e) {
+                const pos = getMousePos(e);
+                const currentStroke = state.userTrace[state.userTrace.length - 1];
+                
+                // Only add if it moved enough (optimization)
+                if (currentStroke.length > 0) {
+                    const last = currentStroke[currentStroke.length - 1];
+                    const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
+                    if (dist < 3) return; // Ignore micro-movements
+                }
+                
+                currentStroke.push(pos);
+                drawUserTrace();
+            }
+
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', moveDraw);
+            canvas.addEventListener('mouseup', stopDraw);
+            canvas.addEventListener('mouseout', stopDraw);
+            canvas.addEventListener('touchstart', startDraw, {passive: false});
+            canvas.addEventListener('touchmove', moveDraw, {passive: false});
+            canvas.addEventListener('touchend', stopDraw, {passive: false});
+
+            function drawTargetShape() {
+                ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+                const w = canvas.clientWidth;
+                const h = canvas.clientHeight;
+
+                ctx.beginPath();
+                state.targetShape.forEach((pt, i) => {
+                    if(i===0) ctx.moveTo(pt.x * w, pt.y * h);
+                    else ctx.lineTo(pt.x * w, pt.y * h);
+                });
+
+                ctx.strokeStyle = '#d946ef'; // Magenta
+                ctx.lineWidth = 6;
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#d946ef';
+                ctx.stroke();
+
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+            }
+
+            function drawUserTrace() {
+                ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+                
+                ctx.strokeStyle = '#0ea5e9'; // Cyan
+                ctx.lineWidth = 4;
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#0ea5e9';
+
+                state.userTrace.forEach(stroke => {
+                    if (stroke.length < 2) return;
+                    ctx.beginPath();
+                    ctx.moveTo(stroke[0].x, stroke[0].y);
+                    for(let i=1; i<stroke.length; i++) {
+                        ctx.lineTo(stroke[i].x, stroke[i].y);
+                    }
+                    ctx.stroke();
+                });
+            }
+
+            window.clearTrace = () => {
+                if(state.status !== 'trace') return;
+                state.userTrace = [];
+                ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+            };
+
+            // --- MATH & ANALYSIS ---
+
+            window.analyzeTrace = () => {
+                if(state.status !== 'trace') return;
+                
+                // Flatten user trace to a single array of points for simplicity
+                let flatUser = [];
+                state.userTrace.forEach(stroke => flatUser.push(...stroke));
+
+                if(flatUser.length < 5) {
+                    showToast("INSUFFICIENT DATA");
+                    return;
+                }
+
+                state.status = 'analyzing';
+                document.getElementById('status-display').innerText = 'VERIFYING SPOOF...';
+                document.getElementById('status-display').className = 'text-[10px] sm:text-xs font-black text-amber-500 animate-pulse';
+                
+                // Show both shapes overlaid
+                ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+                
+                // Draw target ghost
+                const w = canvas.clientWidth;
+                const h = canvas.clientHeight;
+                ctx.beginPath();
+                state.targetShape.forEach((pt, i) => {
+                    if(i===0) ctx.moveTo(pt.x * w, pt.y * h);
+                    else ctx.lineTo(pt.x * w, pt.y * h);
+                });
+                ctx.strokeStyle = 'rgba(217, 70, 239, 0.3)'; // Faded magenta
+                ctx.lineWidth = 8;
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+
+                // Draw user over it
+                drawUserTrace();
+
+                // Calculate Score
+                const score = calculateAccuracy(flatUser, w, h);
+                
+                setTimeout(() => {
+                    endGame(score);
+                }, 1500);
+            };
+
+            function calculateAccuracy(userPoints, w, h) {
+                // 1. Resample target lines into dense points
+                let targetPoints = [];
+                for(let i=0; i<state.targetShape.length - 1; i++) {
+                    let p1 = state.targetShape[i];
+                    let p2 = state.targetShape[i+1];
+                    let dist = Math.hypot((p2.x - p1.x)*w, (p2.y - p1.y)*h);
+                    let steps = Math.max(10, Math.floor(dist / 5)); // Sample every 5px
+                    
+                    for(let s=0; s<steps; s++) {
+                        targetPoints.push({
+                            x: (p1.x + (p2.x - p1.x) * (s/steps)) * w,
+                            y: (p1.y + (p2.y - p1.y) * (s/steps)) * h
+                        });
+                    }
+                }
+
+                // 2. Bidirectional Distance Algorithm
+                let sumDistTargetToUser = 0;
+                let sumDistUserToTarget = 0;
+
+                // For every target point, find closest user point (Did they cover the shape?)
+                for(let tp of targetPoints) {
+                    let minDist = Infinity;
+                    for(let up of userPoints) {
+                        let d = Math.hypot(tp.x - up.x, tp.y - up.y);
+                        if(d < minDist) minDist = d;
+                    }
+                    sumDistTargetToUser += minDist;
+                }
+
+                // For every user point, find closest target point (Did they draw outside the shape?)
+                for(let up of userPoints) {
+                    let minDist = Infinity;
+                    for(let tp of targetPoints) {
+                        let d = Math.hypot(up.x - tp.x, up.y - tp.y);
+                        if(d < minDist) minDist = d;
+                    }
+                    sumDistUserToTarget += minDist;
+                }
+
+                let avgErrorTarget = sumDistTargetToUser / targetPoints.length;
+                let avgErrorUser = sumDistUserToTarget / userPoints.length;
+                
+                // Combine errors. Give more weight to missing the target (avgErrorTarget)
+                let combinedError = (avgErrorTarget * 1.5 + avgErrorUser * 0.5) / 2;
+
+                // Normalize based on screen size (so it's fair on small phones vs big monitors)
+                let maxTolerance = w * 0.15; // 15% of canvas width is 0 score
+                
+                let rawScore = 100 - ((combinedError / maxTolerance) * 100);
+
+                // Length Check Penalty (prevents users from just scribbling the whole screen to get close points)
+                let userPathLen = 0;
+                for(let i=1; i<userPoints.length; i++) {
+                    userPathLen += Math.hypot(userPoints[i].x - userPoints[i-1].x, userPoints[i].y - userPoints[i-1].y);
+                }
+                let targetPathLen = targetPoints.length * 5; // We sampled every 5px roughly
+
+                let lengthRatio = userPathLen / targetPathLen;
+                if(lengthRatio > 1.5) {
+                    rawScore -= (lengthRatio - 1.5) * 50; // Heavy penalty for over-drawing
+                } else if (lengthRatio < 0.5) {
+                    rawScore = 0; // Immediate fail if they barely drew anything
+                }
+
+                return Math.max(0, Math.min(100, rawScore));
+            }
+
+            function endGame(score) {
+                const isWin = score >= 75;
+                
+                const mod = document.getElementById('result-modal');
+                const box = document.getElementById('result-box');
+                const title = document.getElementById('result-title');
+                const sub = document.getElementById('result-sub');
+                const btn = document.getElementById('result-btn');
+                const circ = document.getElementById('score-circle');
+                const sVal = document.getElementById('score-val');
+
+                mod.classList.remove('hidden');
+                
+                // Animate Score Counting Up
+                let currentDisp = 0;
+                let countInterval = setInterval(() => {
+                    currentDisp += 2;
+                    if(currentDisp >= score) {
+                        currentDisp = Math.round(score);
+                        clearInterval(countInterval);
+                    }
+                    sVal.innerText = currentDisp + '%';
+                }, 20);
+
+                if(isWin) {
+                    box.style.borderColor = '#10b981';
+                    circ.style.borderColor = '#10b981';
+                    circ.style.boxShadow = '0 0 30px rgba(16, 185, 129, 0.4)';
+                    sVal.style.color = '#10b981';
+                    
+                    title.innerText = "FORGE SUCCESSFUL";
+                    title.style.color = '#10b981';
+                    sub.innerText = "Biometric spoof accepted.";
+                    
+                    btn.innerText = "PROCEED TO NEXT NODE";
+                    btn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-black font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                    
+                    state.level++;
+                } else {
+                    box.style.borderColor = '#ef4444';
+                    circ.style.borderColor = '#ef4444';
+                    circ.style.boxShadow = '0 0 30px rgba(239, 68, 68, 0.4)';
+                    sVal.style.color = '#ef4444';
+
+                    title.innerText = "FORGE REJECTED";
+                    title.style.color = '#ef4444';
+                    sub.innerText = "Biometric mismatch detected. Anomaly logged.";
+                    
+                    btn.innerText = "REBOOT CONNECTION";
+                    btn.className = "w-full bg-red-900 hover:bg-red-800 text-white font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                    
+                    state.level = 1;
+                }
+            }
+
+            window.showToast = (msg) => {
+                const t = document.getElementById('toast');
+                t.innerText = msg;
+                t.classList.remove('opacity-0', 'translate-y-10');
+                t.classList.add('opacity-100', 'translate-y-0');
+                setTimeout(() => {
+                    t.classList.remove('opacity-100', 'translate-y-0');
+                    t.classList.add('opacity-0', 'translate-y-10');
+                }, 2500);
+            };
+
+        })();
+    </script>
+</body>
+</html>

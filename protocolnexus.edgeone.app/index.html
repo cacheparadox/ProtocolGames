@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Nexus — Node wiring puzzle. Connect all color-matched data terminals without crossing signal paths.">
+    <title>ICE // Nexus Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔗</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --bg: #05030a; --grid-bg: #0b0714; }
+        * { box-sizing: border-box; }
+        body { background: var(--bg); color: #d1d5db; font-family: 'JetBrains Mono', monospace; margin: 0; overflow: hidden; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .panel { background: var(--grid-bg); border: 1px solid #2e1065; box-shadow: 4px 4px 0 rgba(0,0,0,0.8); position: relative; }
+        .panel::before { content:''; position:absolute; top:0; left:0; width:10px; height:10px; border-top:2px solid #8b5cf6; border-left:2px solid #8b5cf6; }
+        .crt-overlay { position:fixed; inset:0; pointer-events:none; z-index:50; background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.15) 50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03)); background-size:100% 2px,3px 100%; }
+        .modal-overlay { position:fixed; inset:0; background:rgba(5,3,10,0.97); backdrop-filter:blur(8px); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .hidden { display:none !important; }
+
+        #board-wrap { position: relative; background: #000; border: 1px solid #8b5cf6; border-radius: 8px; box-shadow: 0 0 30px rgba(139,92,246,0.15), inset 0 0 40px rgba(0,0,0,0.8); }
+        #board-canvas { display: block; }
+
+        /* level select */
+        .lvl-btn { background:#0b0714; border:1px solid #2e1065; color:#8b5cf6; font-family:'Orbitron',sans-serif; font-size:11px; font-weight:900; padding:10px; border-radius:6px; cursor:pointer; transition:all 0.2s; }
+        .lvl-btn:hover { background:#1a0a3a; border-color:#8b5cf6; box-shadow:0 0 12px rgba(139,92,246,0.3); }
+        .lvl-btn.solved { background:rgba(16,185,129,0.1); border-color:#10b981; color:#10b981; }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen" style="height:100dvh; overflow:hidden;">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full border-b border-violet-900/30 p-3 sm:p-4 flex justify-between items-center z-10 shadow-lg flex-shrink-0" style="background:#0b0714">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-violet-500 tracking-widest">PROTOCOL<span class="text-cyan-400">NEXUS</span></h1>
+                <div class="text-[8px] sm:text-[10px] text-violet-700 tracking-[0.3em]">NODE_WIRE // NO_CROSS</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button onclick="showLevelSelect()" class="orbitron text-[9px] text-violet-500 border border-violet-500/30 px-3 py-1.5 rounded hover:bg-violet-500/10 transition-colors">LEVELS</button>
+            <div class="text-right">
+                <div class="text-[8px] text-slate-500 uppercase tracking-widest">Level</div>
+                <div id="level-display" class="text-xl font-black text-white orbitron">01</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Info bar -->
+    <div class="flex items-center justify-between px-4 py-2 bg-black/30 border-b border-violet-900/20 flex-shrink-0 text-[10px]">
+        <div class="flex gap-4">
+            <span class="text-slate-500">PIPES <span id="pipes-filled" class="text-violet-400 font-bold">0%</span></span>
+            <span class="text-slate-500">GRID <span id="grid-size-disp" class="text-white font-bold">5×5</span></span>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="undoPath()" class="text-slate-500 hover:text-white transition-colors orbitron text-[9px] border border-slate-700 px-2 py-1 rounded">UNDO</button>
+            <button onclick="resetLevel()" class="text-slate-500 hover:text-red-400 transition-colors orbitron text-[9px] border border-slate-700 px-2 py-1 rounded">RESET</button>
+        </div>
+    </div>
+
+    <!-- Board -->
+    <div class="flex-1 flex items-center justify-center p-4 overflow-hidden">
+        <div id="board-wrap">
+            <canvas id="board-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Win modal -->
+    <div id="win-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div class="text-5xl mb-4">🔗</div>
+            <h2 class="orbitron text-2xl font-black text-violet-400 mb-2">NEXUS LINKED</h2>
+            <p id="win-sub" class="text-[11px] text-slate-400 mb-8 tracking-widest"></p>
+            <div class="flex gap-3">
+                <button onclick="nextLevel()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-black rounded bg-violet-500 hover:bg-violet-400">NEXT LEVEL</button>
+                <button onclick="resetLevel()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-slate-400 bg-black border border-slate-700 rounded hover:text-white">RETRY</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Level select modal -->
+    <div id="level-modal" class="modal-overlay hidden">
+        <div class="panel p-6 max-w-lg w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="orbitron text-lg font-black text-violet-400">SELECT LEVEL</h2>
+                <button onclick="hideLevelSelect()" class="text-slate-500 hover:text-white text-sm orbitron">[CLOSE]</button>
+            </div>
+            <div id="level-grid" class="grid grid-cols-5 gap-2"></div>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// PROTOCOL NEXUS — Flow-Free Style Node Wiring Game
+// ============================================================
+
+// Color palette for nodes
+const COLORS = [
+    { fill: '#0ea5e9', glow: 'rgba(14,165,233,0.6)', name: 'cyan' },
+    { fill: '#d946ef', glow: 'rgba(217,70,239,0.6)', name: 'magenta' },
+    { fill: '#10b981', glow: 'rgba(16,185,129,0.6)', name: 'emerald' },
+    { fill: '#f59e0b', glow: 'rgba(245,158,11,0.6)', name: 'amber' },
+    { fill: '#ef4444', glow: 'rgba(239,68,68,0.6)', name: 'red' },
+    { fill: '#8b5cf6', glow: 'rgba(139,92,246,0.6)', name: 'violet' },
+    { fill: '#f97316', glow: 'rgba(249,115,22,0.6)', name: 'orange' },
+    { fill: '#06b6d4', glow: 'rgba(6,182,212,0.6)', name: 'teal' },
+];
+
+// Handcrafted levels [gridSize, ...pairs [[r1,c1],[r2,c2],colorIdx]]
+const LEVELS = [
+    // Level 1: 5x5, 3 pairs
+    { size: 5, pairs: [[[0,0],[4,4],0],[[0,4],[4,0],1],[[2,1],[2,3],2]] },
+    // Level 2: 5x5, 4 pairs
+    { size: 5, pairs: [[[0,0],[3,3],0],[[0,4],[4,1],1],[[4,4],[1,2],2],[[0,2],[4,3],3]] },
+    // Level 3: 5x5, 5 pairs
+    { size: 5, pairs: [[[0,0],[4,4],0],[[0,2],[2,0],1],[[0,4],[4,0],2],[[2,4],[4,2],3],[[1,1],[3,3],4]] },
+    // Level 4: 6x6, 4 pairs
+    { size: 6, pairs: [[[0,0],[5,5],0],[[0,5],[5,0],1],[[0,2],[5,3],2],[[2,0],[2,5],3]] },
+    // Level 5: 6x6, 5 pairs
+    { size: 6, pairs: [[[0,0],[5,5],0],[[0,5],[5,0],1],[[2,1],[4,4],2],[[1,3],[3,1],3],[[0,3],[5,2],4]] },
+    // Level 6: 7x7, 5 pairs
+    { size: 7, pairs: [[[0,0],[6,6],0],[[0,6],[6,0],1],[[0,3],[6,3],2],[[3,0],[3,6],3],[[2,2],[4,4],4]] },
+    // Level 7: 7x7, 6 pairs
+    { size: 7, pairs: [[[0,0],[6,6],0],[[0,6],[6,0],1],[[0,3],[6,4],2],[[3,0],[3,6],3],[[1,1],[5,5],4],[[2,4],[4,2],5]] },
+    // Level 8: 8x8, 6 pairs
+    { size: 8, pairs: [[[0,0],[7,7],0],[[0,7],[7,0],1],[[0,3],[7,4],2],[[3,0],[4,7],3],[[1,2],[6,5],4],[[2,6],[5,1],5]] },
+    // Level 9: 8x8, 7 pairs
+    { size: 8, pairs: [[[0,0],[7,7],0],[[0,7],[7,0],1],[[0,4],[7,3],2],[[4,0],[3,7],3],[[1,1],[6,6],4],[[2,5],[5,2],5],[[1,4],[6,3],6]] },
+    // Level 10: 9x9, 7 pairs
+    { size: 9, pairs: [[[0,0],[8,8],0],[[0,8],[8,0],1],[[0,4],[8,4],2],[[4,0],[4,8],3],[[2,2],[6,6],4],[[1,5],[7,3],5],[[3,1],[5,7],6]] },
+    // Level 11: 9x9, 8 pairs
+    { size: 9, pairs: [[[0,0],[8,8],0],[[0,8],[8,0],1],[[0,4],[8,4],2],[[4,0],[4,8],3],[[2,2],[6,6],4],[[1,6],[7,2],5],[[3,1],[5,7],6],[[2,5],[6,3],7]] },
+    // Level 12: 10x10, 8 pairs
+    { size: 10, pairs: [[[0,0],[9,9],0],[[0,9],[9,0],1],[[0,5],[9,4],2],[[5,0],[4,9],3],[[2,2],[7,7],4],[[1,6],[8,3],5],[[3,1],[6,8],6],[[1,4],[8,5],7]] },
+    // Level 13: 10x10, 8 pairs (harder arrangement)
+    { size: 10, pairs: [[[0,2],[9,7],0],[[0,7],[9,2],1],[[2,0],[7,9],2],[[7,0],[2,9],3],[[3,3],[6,6],4],[[3,6],[6,3],5],[[0,5],[9,4],6],[[5,0],[4,9],7]] },
+    // Level 14: 11x11
+    { size: 11, pairs: [[[0,0],[10,10],0],[[0,10],[10,0],1],[[0,5],[10,5],2],[[5,0],[5,10],3],[[2,2],[8,8],4],[[2,8],[8,2],5],[[1,5],[9,5],6],[[5,1],[5,9],7]] },
+    // Level 15: 12x12
+    { size: 12, pairs: [[[0,0],[11,11],0],[[0,11],[11,0],1],[[0,6],[11,5],2],[[6,0],[5,11],3],[[2,2],[9,9],4],[[2,9],[9,2],5],[[4,1],[7,10],6],[[1,4],[10,7],7]] },
+];
+
+const solved = new Set(JSON.parse(localStorage.getItem('nexus_solved') || '[]'));
+
+let G = {
+    level: 0,
+    size: 0,
+    cellPx: 0,
+    pairs: [],
+    paths: [],      // paths[colorIdx] = [[r,c],...] or null
+    grid: [],       // grid[r][c] = colorIdx or -1
+    endpoints: [],  // [[r1,c1],[r2,c2]] per color
+    drawing: false,
+    drawColor: -1,
+    drawPath: [],
+};
+
+const canvas = document.getElementById('board-canvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('board-wrap');
+
+function loadLevel(idx) {
+    const lv = LEVELS[idx % LEVELS.length];
+    G.level = idx;
+    G.size = lv.size;
+    G.pairs = lv.pairs;
+    G.paths = lv.pairs.map(() => null);
+    G.grid = Array.from({length: G.size}, () => Array(G.size).fill(-1));
+    G.endpoints = lv.pairs.map(p => [p[0], p[1]]);
+    // Place endpoints
+    lv.pairs.forEach((p, ci) => {
+        G.grid[p[0][0]][p[0][1]] = ci;
+        G.grid[p[1][0]][p[1][1]] = ci;
+    });
+    G.drawing = false; G.drawColor = -1; G.drawPath = [];
+
+    document.getElementById('level-display').textContent = String(idx + 1).padStart(2, '0');
+    document.getElementById('grid-size-disp').textContent = `${G.size}×${G.size}`;
+    document.getElementById('win-modal').classList.add('hidden');
+
+    resize();
+    updateLevelGrid();
+}
+
+function resize() {
+    const avail = Math.min(wrap.parentElement.clientWidth - 32, wrap.parentElement.clientHeight - 16);
+    G.cellPx = Math.floor(avail / G.size);
+    const total = G.cellPx * G.size;
+    canvas.width = total; canvas.height = total;
+    wrap.style.width = total + 'px'; wrap.style.height = total + 'px';
+    draw();
+}
+
+function isEndpoint(r, c) {
+    return G.pairs.some(p => (p[0][0]===r&&p[0][1]===c)||(p[1][0]===r&&p[1][1]===c));
+}
+function colorOfEndpoint(r, c) {
+    for (let ci = 0; ci < G.pairs.length; ci++) {
+        const p = G.pairs[ci];
+        if ((p[0][0]===r&&p[0][1]===c)||(p[1][0]===r&&p[1][1]===c)) return ci;
+    }
+    return -1;
+}
+
+function draw() {
+    const cp = G.cellPx;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(139,92,246,0.12)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= G.size; i++) {
+        ctx.beginPath(); ctx.moveTo(i*cp, 0); ctx.lineTo(i*cp, canvas.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i*cp); ctx.lineTo(canvas.width, i*cp); ctx.stroke();
+    }
+
+    // Draw paths
+    G.paths.forEach((path, ci) => { if (path) drawPath(path, ci, false); });
+    // Draw current drawing path
+    if (G.drawing && G.drawPath.length > 1) drawPath(G.drawPath, G.drawColor, true);
+
+    // Draw endpoints
+    G.pairs.forEach((pair, ci) => {
+        drawNode(pair[0][0], pair[0][1], ci);
+        drawNode(pair[1][0], pair[1][1], ci);
+    });
+}
+
+function drawPath(path, ci, isActive) {
+    if (path.length < 2) return;
+    const cp = G.cellPx;
+    const c = COLORS[ci % COLORS.length];
+    ctx.strokeStyle = c.fill;
+    ctx.lineWidth = cp * 0.35;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = isActive ? 0.9 : 0.75;
+    ctx.shadowColor = c.glow;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(path[0][1]*cp + cp/2, path[0][0]*cp + cp/2);
+    for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(path[i][1]*cp + cp/2, path[i][0]*cp + cp/2);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+}
+
+function drawNode(r, c, ci) {
+    const cp = G.cellPx;
+    const cx = c * cp + cp / 2, cy = r * cp + cp / 2;
+    const col = COLORS[ci % COLORS.length];
+    const radius = cp * 0.34;
+    // Glow
+    ctx.shadowColor = col.glow; ctx.shadowBlur = 14;
+    ctx.fillStyle = col.fill;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Inner dot
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function cellFromPos(x, y) {
+    const cp = G.cellPx;
+    const rect = canvas.getBoundingClientRect();
+    const px = x - rect.left, py = y - rect.top;
+    const r = Math.floor(py / cp), c = Math.floor(px / cp);
+    if (r < 0 || r >= G.size || c < 0 || c >= G.size) return null;
+    return [r, c];
+}
+
+function adjacent(a, b) {
+    return Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]) === 1;
+}
+
+function startDraw(x, y) {
+    const cell = cellFromPos(x, y);
+    if (!cell) return;
+    const [r, c] = cell;
+    const epColor = colorOfEndpoint(r, c);
+    if (epColor !== -1) {
+        // Start from endpoint
+        G.drawing = true;
+        G.drawColor = epColor;
+        // Clear old path for this color
+        clearPath(epColor);
+        G.drawPath = [[r, c]];
+        G.grid[r][c] = epColor;
+    } else if (G.grid[r][c] !== -1) {
+        // Start mid-path of existing color
+        const ci = G.grid[r][c];
+        clearPath(ci);
+        G.drawing = true;
+        G.drawColor = ci;
+        G.drawPath = [[r, c]];
+        G.grid[r][c] = ci;
+    }
+}
+
+function continueDraw(x, y) {
+    if (!G.drawing) return;
+    const cell = cellFromPos(x, y);
+    if (!cell) return;
+    const [r, c] = cell;
+    const last = G.drawPath[G.drawPath.length - 1];
+    if (last[0] === r && last[1] === c) return;
+    if (!adjacent(last, [r, c])) return;
+
+    // Back-track?
+    if (G.drawPath.length >= 2) {
+        const prev = G.drawPath[G.drawPath.length - 2];
+        if (prev[0] === r && prev[1] === c) {
+            G.grid[last[0]][last[1]] = -1;
+            G.drawPath.pop();
+            draw();
+            return;
+        }
+    }
+
+    // Check if cell is occupied by another endpoint or different color path
+    const existing = G.grid[r][c];
+    if (existing !== -1 && existing !== G.drawColor && isEndpoint(r, c)) {
+        // Can't enter another color's endpoint
+        return;
+    }
+    if (existing !== -1 && existing !== G.drawColor && !isEndpoint(r, c)) {
+        clearPath(existing);
+    }
+
+    G.grid[r][c] = G.drawColor;
+    G.drawPath.push([r, c]);
+
+    // Did we hit our own endpoint (the other end)?
+    const otherEp = G.pairs[G.drawColor].find(ep => ep[0]===r && ep[1]===c);
+    if (otherEp) {
+        // Complete the path
+        G.paths[G.drawColor] = [...G.drawPath];
+        G.drawing = false;
+        draw();
+        checkWin();
+        return;
+    }
+    draw();
+}
+
+function endDraw() {
+    if (!G.drawing) return;
+    G.drawing = false;
+    // If path doesn't end at endpoint, abandon partial
+    const last = G.drawPath[G.drawPath.length - 1];
+    const completed = G.pairs[G.drawColor].some(ep => ep[0]===last[0]&&ep[1]===last[1] && !(G.drawPath.length===1 && G.drawPath[0][0]===last[0]&&G.drawPath[0][1]===last[1]));
+    if (!completed || G.drawPath.length < 2) {
+        G.drawPath.forEach(([r,c]) => { if (!isEndpoint(r,c)) G.grid[r][c] = -1; });
+    }
+    G.drawPath = [];
+    draw();
+}
+
+function clearPath(ci) {
+    if (G.paths[ci]) {
+        G.paths[ci].forEach(([r,c]) => {
+            if (!isEndpoint(r,c)) G.grid[r][c] = -1;
+            else G.grid[r][c] = ci;
+        });
+        G.paths[ci] = null;
+    }
+}
+
+function checkWin() {
+    const allConnected = G.pairs.every((_, ci) => G.paths[ci] !== null);
+    if (!allConnected) return;
+    // Check grid full
+    const total = G.size * G.size;
+    let filled = 0;
+    for (let r = 0; r < G.size; r++) for (let c = 0; c < G.size; c++) if (G.grid[r][c] !== -1) filled++;
+    const pct = Math.round(filled / total * 100);
+    updateFill();
+    if (filled === total) {
+        solved.add(G.level);
+        localStorage.setItem('nexus_solved', JSON.stringify([...solved]));
+        document.getElementById('win-sub').textContent = `LEVEL ${G.level+1} COMPLETE — ALL NODES LINKED`;
+        document.getElementById('win-modal').classList.remove('hidden');
+    }
+}
+
+function updateFill() {
+    let filled = 0;
+    for (let r = 0; r < G.size; r++) for (let c = 0; c < G.size; c++) if (G.grid[r][c] !== -1) filled++;
+    const pct = Math.round(filled / (G.size * G.size) * 100);
+    document.getElementById('pipes-filled').textContent = pct + '%';
+}
+
+// Mouse events
+canvas.addEventListener('mousedown', e => { startDraw(e.clientX, e.clientY); draw(); });
+canvas.addEventListener('mousemove', e => { continueDraw(e.clientX, e.clientY); updateFill(); });
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mouseleave', endDraw);
+
+// Touch events
+canvas.addEventListener('touchstart', e => { e.preventDefault(); const t=e.touches[0]; startDraw(t.clientX,t.clientY); draw(); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); const t=e.touches[0]; continueDraw(t.clientX,t.clientY); updateFill(); }, {passive:false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); endDraw(); }, {passive:false});
+
+window.addEventListener('resize', resize);
+
+window.resetLevel = () => loadLevel(G.level);
+window.nextLevel = () => loadLevel(G.level + 1);
+window.undoPath = () => {
+    // Find last completed path and remove it
+    for (let ci = G.paths.length - 1; ci >= 0; ci--) {
+        if (G.paths[ci]) { clearPath(ci); draw(); updateFill(); return; }
+    }
+};
+
+function showLevelSelect() {
+    document.getElementById('level-modal').classList.remove('hidden');
+}
+function hideLevelSelect() {
+    document.getElementById('level-modal').classList.add('hidden');
+}
+window.showLevelSelect = showLevelSelect;
+window.hideLevelSelect = hideLevelSelect;
+
+function updateLevelGrid() {
+    const grid = document.getElementById('level-grid');
+    grid.innerHTML = '';
+    LEVELS.forEach((_, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'lvl-btn' + (solved.has(i) ? ' solved' : '');
+        btn.textContent = String(i+1).padStart(2,'0');
+        btn.onclick = () => { loadLevel(i); hideLevelSelect(); };
+        grid.appendChild(btn);
+    });
+}
+
+loadLevel(0);
+</script>
+</body>
+</html>
+

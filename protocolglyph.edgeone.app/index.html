@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Glyph — Identify hidden geometry. A spatial reasoning protocol using coordinate scans to reveal passkeys.">
+    <title>GLYPH // Protocol v4.0</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <style>
+        @import url('../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B900&family=JetBrains+Mono%253Awght@400%3B700&display=swap.css');
+        
+        :root {
+            --bg: #020617;
+            --accent: #38bdf8;
+            --hit: #0ea5e9;
+            --miss: #ef4444;
+            --flash: #fbbf24;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg);
+            color: #f8fafc;
+            overflow-x: hidden;
+            touch-action: manipulation;
+            background-image: radial-gradient(circle at 50% 50%, #111827 0%, #020617 100%);
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        .letter-slot {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #1e293b;
+            background: rgba(30, 41, 59, 0.2);
+            border-radius: 4px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .letter-slot.revealed {
+            border-color: var(--accent);
+            background: rgba(14, 165, 233, 0.1);
+            color: var(--accent);
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            background: #1e293b;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .dot.hit {
+            background: var(--accent);
+            box-shadow: 0 0 15px var(--accent);
+            transform: rotate(45deg) scale(1.2);
+        }
+
+        .dot.miss {
+            background: #334155;
+            opacity: 0.4;
+            transform: scale(0.7);
+        }
+
+        .dot.flash {
+            background: var(--flash) !important;
+            box-shadow: 0 0 20px var(--flash) !important;
+            transform: scale(2);
+            z-index: 50;
+        }
+
+        .keypad-btn {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid #334155;
+            transition: all 0.1s ease;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+        }
+
+        .keypad-btn:active {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.05) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .level-badge {
+            background: linear-gradient(90deg, #0ea5e9, #6366f1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: black;
+            font-weight: 900;
+            font-size: 10px;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4">
+    <div class="scanline"></div>
+
+    <header class="w-full max-w-md flex flex-col gap-4 mt-4 mb-6">
+        <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest self-start">← HUB</a>
+        <div class="flex justify-between items-start">
+            <div class="space-y-1">
+                <div class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Decryption Streak</div>
+                <div id="streak-val" class="text-4xl font-black font-mono text-sky-400">00</div>
+            </div>
+            <div class="text-right">
+                <div id="difficulty-tag" class="level-badge mb-1">STABLE</div>
+                <div class="text-[10px] text-slate-500 uppercase font-black tracking-widest">Tries: <span id="tries-val" class="text-white">0</span></div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="h-px flex-1 bg-gradient-to-r from-transparent to-slate-800"></div>
+            <h1 class="orbitron text-2xl font-black italic tracking-tighter text-white">GLYPH<span class="text-sky-500">SYSTEM</span></h1>
+            <div class="h-px flex-1 bg-gradient-to-l from-transparent to-slate-800"></div>
+        </div>
+    </header>
+
+    <main id="game-container" class="w-full max-w-md space-y-8">
+        <!-- Letter Slots -->
+        <div id="word-slots" class="grid gap-2 justify-center py-4 min-h-[80px]">
+            <div class="text-sky-500/50 text-[10px] animate-pulse">CONNECTING...</div>
+        </div>
+
+        <!-- Visual Terminal -->
+        <div class="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl backdrop-blur-md">
+            <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                <span class="text-[10px] text-sky-500/40 font-black tracking-[0.4em]">VECTOR_INPUT</span>
+                <span id="coord-display" class="text-3xl font-mono font-black text-sky-400">--:--</span>
+            </div>
+
+            <div class="flex justify-center mb-8">
+                <div id="dot-grid" class="grid grid-cols-5 gap-8"></div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <button class="keypad-btn p-5 rounded-xl text-xl" onclick="keyIn(1)">1</button>
+                <button class="keypad-btn p-5 rounded-xl text-xl" onclick="keyIn(2)">2</button>
+                <button class="keypad-btn p-5 rounded-xl text-xl" onclick="keyIn(3)">3</button>
+                <button class="keypad-btn p-5 rounded-xl text-xl" onclick="keyIn(4)">4</button>
+                <button class="keypad-btn p-5 rounded-xl text-xl" onclick="keyIn(5)">5</button>
+                <button class="keypad-btn p-5 rounded-xl text-xs text-slate-500 hover:text-red-400" onclick="clearKey()">CLR</button>
+            </div>
+        </div>
+
+        <button onclick="abandon()" class="w-full text-center text-[10px] text-slate-600 hover:text-red-500 transition-colors uppercase font-black tracking-[0.5em]">
+            Abandon Current Streak
+        </button>
+    </main>
+
+    <div id="toast" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-10 py-5 bg-sky-500 text-black font-black orbitron uppercase text-xs tracking-widest scale-0 transition-transform z-[2000] rounded-lg shadow-2xl"></div>
+
+    <script>
+        const GLYPHS = {
+            'A':[[1,5],[2,3],[3,1],[4,3],[5,5],[2,4],[3,4],[4,4]],
+            'B':[[1,1],[1,2],[1,3],[1,4],[1,5],[2,1],[3,1],[4,2],[3,3],[2,3],[4,4],[3,5],[2,5]],
+            'C':[[5,2],[4,1],[3,1],[2,1],[1,2],[1,3],[1,4],[2,5],[3,5],[4,5],[5,4]],
+            'D':[[1,1],[1,2],[1,3],[1,4],[1,5],[2,1],[3,1],[4,2],[4,3],[4,4],[3,5],[2,5]],
+            'E':[[5,1],[4,1],[3,1],[2,1],[1,1],[1,2],[1,3],[1,4],[1,5],[2,5],[3,5],[4,5],[5,5],[2,3],[3,3]],
+            'F':[[1,1],[1,2],[1,3],[1,4],[1,5],[2,1],[3,1],[4,1],[5,1],[2,3],[3,3]],
+            'G':[[5,2],[4,1],[3,1],[2,1],[1,2],[1,3],[1,4],[2,5],[3,5],[4,5],[5,5],[5,4],[5,3],[4,3]],
+            'H':[[1,1],[1,2],[1,3],[1,4],[1,5],[5,1],[5,2],[5,3],[5,4],[5,5],[2,3],[3,3],[4,3]],
+            'I':[[2,1],[3,1],[4,1],[3,2],[3,3],[3,4],[2,5],[3,5],[4,5]],
+            'J':[[4,1],[5,1],[5,2],[5,3],[5,4],[4,5],[3,5],[2,5],[1,4]],
+            'K':[[1,1],[1,2],[1,3],[1,4],[1,5],[2,3],[3,2],[4,1],[3,4],[4,5]],
+            'L':[[1,1],[1,2],[1,3],[1,4],[1,5],[2,5],[3,5],[4,5],[5,5]],
+            'M':[[1,5],[1,4],[1,3],[1,2],[1,1],[2,2],[3,3],[4,2],[5,1],[5,2],[5,3],[5,4],[5,5]],
+            'N':[[1,5],[1,4],[1,3],[1,2],[1,1],[2,2],[3,3],[4,4],[5,5],[5,4],[5,3],[5,2],[5,1]],
+            'O':[[2,1],[3,1],[4,1],[1,2],[1,3],[1,4],[2,5],[3,5],[4,5],[5,2],[5,3],[5,4]],
+            'P':[[1,5],[1,4],[1,3],[1,2],[1,1],[2,1],[3,1],[4,2],[3,3],[2,3]],
+            'Q':[[2,1],[3,1],[4,1],[1,2],[1,3],[1,4],[2,5],[3,5],[4,5],[5,2],[5,3],[5,4],[4,4],[5,5]],
+            'R':[[1,5],[1,4],[1,3],[1,2],[1,1],[2,1],[3,1],[4,2],[3,3],[2,3],[3,4],[4,5]],
+            'S':[[5,1],[4,1],[3,1],[2,1],[1,2],[2,3],[3,3],[4,3],[5,4],[4,5],[3,5],[2,5],[1,5]],
+            'T':[[1,1],[2,1],[3,1],[4,1],[5,1],[3,2],[3,3],[3,4],[3,5]],
+            'U':[[1,1],[1,2],[1,3],[1,4],[2,5],[3,5],[4,5],[5,4],[5,3],[5,2],[5,1]],
+            'V':[[1,1],[1,2],[1,3],[2,4],[3,5],[4,4],[5,3],[5,2],[5,1]],
+            'W':[[1,1],[1,2],[1,3],[1,4],[2,5],[3,4],[4,5],[5,4],[5,3],[5,2],[5,1]],
+            'X':[[1,1],[2,2],[3,3],[4,4],[5,5],[1,5],[2,4],[4,2],[5,1]],
+            'Y':[[1,1],[2,2],[3,3],[4,2],[5,1],[3,4],[3,5]],
+            'Z':[[1,1],[2,1],[3,1],[4,1],[5,1],[4,2],[3,3],[2,4],[1,5],[2,5],[3,5],[4,5],[5,5]]
+        };
+
+        const FALLBACKS = ["CYBER", "GHOST", "PULSE", "PROXY", "CRYPT", "SIGNAL", "STATIC", "VECTOR", "MATRIX", "NEURAL"];
+
+        let state = {
+            streak: 0,
+            word: "",
+            revealed: [],
+            input: [],
+            tries: 0,
+            busy: false
+        };
+
+        function showToast(msg, dur=2500) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.transform = "translate(-50%, -50%) scale(1)";
+            setTimeout(() => t.style.transform = "translate(-50%, -50%) scale(0)", dur);
+        }
+
+        async function fetchWord() {
+            // Difficulty scaling:
+            // Streak 0-2: 4-5 chars
+            // Streak 3-5: 5-6 chars
+            // Streak 6-8: 6-7 chars
+            // Streak 9+: 8 chars
+            let len = 4;
+            if (state.streak >= 9) len = 8;
+            else if (state.streak >= 6) len = Math.floor(Math.random() * 2) + 6;
+            else if (state.streak >= 3) len = Math.floor(Math.random() * 2) + 5;
+            else len = Math.floor(Math.random() * 2) + 4;
+
+            document.getElementById('difficulty-tag').innerText = 
+                len <= 4 ? "STABLE" : len <= 5 ? "WARNING" : len <= 6 ? "CRITICAL" : "MAINFRAME";
+            
+            try {
+                const res = await fetch(`https://api.datamuse.com/words?sp=${'?'.repeat(len)}&max=100`);
+                const data = await res.json();
+                const filtered = data.filter(w => /^[a-zA-Z]+$/.test(w.word));
+                if (filtered.length > 0) return filtered[Math.floor(Math.random() * filtered.length)].word.toUpperCase();
+            } catch (e) {}
+            return FALLBACKS[Math.floor(Math.random() * FALLBACKS.length)];
+        }
+
+        async function initGame(isNewStreak = false) {
+            state.busy = true;
+            if (isNewStreak) state.streak = 0;
+            state.tries = 0;
+            state.revealed = [];
+            state.input = [];
+            
+            document.getElementById('streak-val').innerText = state.streak.toString().padStart(2, '0');
+            document.getElementById('tries-val').innerText = "0";
+            document.getElementById('coord-display').innerText = "--:--";
+
+            const container = document.getElementById('word-slots');
+            container.innerHTML = '<div class="text-sky-500/50 text-[10px] animate-pulse">INTERCEPTING SIGNAL...</div>';
+
+            state.word = await fetchWord();
+            
+            container.innerHTML = '';
+            container.style.gridTemplateColumns = `repeat(${state.word.length}, 1fr)`;
+            for (let i = 0; i < state.word.length; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'letter-slot';
+                slot.id = `slot-${i}`;
+                container.appendChild(slot);
+            }
+
+            const grid = document.getElementById('dot-grid');
+            grid.innerHTML = '';
+            for (let y = 1; y <= 5; y++) {
+                for (let x = 1; x <= 5; x++) {
+                    const d = document.createElement('div');
+                    d.className = 'dot';
+                    d.id = `dot-${x}-${y}`;
+                    grid.appendChild(d);
+                }
+            }
+
+            state.busy = false;
+        }
+
+        function keyIn(n) {
+            if (state.busy || state.input.length >= 2) return;
+            state.input.push(n);
+            updatePreview();
+            if (state.input.length === 2) processMove();
+        }
+
+        function clearKey() {
+            if (state.busy) return;
+            state.input = [];
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const p = document.getElementById('coord-display');
+            if (state.input.length === 0) p.innerText = "--:--";
+            else if (state.input.length === 1) p.innerText = `${state.input[0]}:--`;
+            else p.innerText = `${state.input[0]}:${state.input[1]}`;
+        }
+
+        async function processMove() {
+            state.busy = true;
+            const [x, y] = state.input;
+            state.tries++;
+            document.getElementById('tries-val').innerText = state.tries;
+
+            let hitFound = false;
+            let lettersToFlash = [];
+
+            for (let i = 0; i < state.word.length; i++) {
+                const char = state.word[i];
+                const points = GLYPHS[char] || [];
+                const isPart = points.some(p => p[0] === x && p[1] === y);
+                if (isPart) {
+                    hitFound = true;
+                    if (!state.revealed.includes(i)) {
+                        lettersToFlash.push({ char, index: i });
+                    }
+                }
+            }
+
+            const dot = document.getElementById(`dot-${x}-${y}`);
+            if (dot) dot.classList.add(hitFound ? 'hit' : 'miss');
+
+            if (lettersToFlash.length > 0) {
+                // Flash the shapes of newly revealed unique letters
+                const uniqueChars = [...new Set(lettersToFlash.map(l => l.char))];
+                for (const char of uniqueChars) {
+                    const points = GLYPHS[char];
+                    points.forEach(p => {
+                        const d = document.getElementById(`dot-${p[0]}-${p[1]}`);
+                        if (d) d.classList.add('flash');
+                    });
+                    await new Promise(r => setTimeout(r, 400));
+                    points.forEach(p => {
+                        const d = document.getElementById(`dot-${p[0]}-${p[1]}`);
+                        if (d) d.classList.remove('flash');
+                    });
+                    
+                    // Reveal all instances of this letter
+                    for (let i = 0; i < state.word.length; i++) {
+                        if (state.word[i] === char) {
+                            if (!state.revealed.includes(i)) {
+                                state.revealed.push(i);
+                                const slot = document.getElementById(`slot-${i}`);
+                                slot.innerText = char;
+                                slot.classList.add('revealed');
+                            }
+                        }
+                    }
+                }
+            } else {
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            state.input = [];
+            updatePreview();
+            state.busy = false;
+            checkWin();
+        }
+
+        function checkWin() {
+            if (state.revealed.length === state.word.length) {
+                state.streak++;
+                showToast("PROTOCOL SECURED. STREAK UPDATED.");
+                setTimeout(() => initGame(false), 3000);
+            }
+        }
+
+        function abandon() {
+            if (confirm("Abandoning streak will reset difficulty to level 0. Confirm?")) {
+                initGame(true);
+            }
+        }
+
+        window.onload = () => initGame(false);
+    </script>
+</body>
+</html>

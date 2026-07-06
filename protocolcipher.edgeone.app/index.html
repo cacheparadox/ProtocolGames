@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Protocol Cipher — Substitution cipher cracking. Map ciphertext letters to plaintext via frequency analysis under time pressure.">
+    <title>ICE // Cipher Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔑</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #020d06;
+            --accent: #a3e635;
+            --accent-dim: rgba(163,230,53,0.15);
+            --red: #ef4444;
+            --grid-bg: #070f08;
+        }
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0; overflow-x: hidden; user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .panel {
+            background: var(--grid-bg);
+            border: 1px solid #1a2e1a;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.8);
+            position: relative;
+        }
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0;
+            width: 10px; height: 10px;
+            border-top: 2px solid var(--accent); border-left: 2px solid var(--accent);
+        }
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.2) 50%),
+                        linear-gradient(90deg,rgba(255,0,0,0.04),rgba(0,255,0,0.01),rgba(0,0,255,0.04));
+            background-size: 100% 2px, 3px 100%;
+        }
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(2,13,6,0.97); backdrop-filter: blur(8px);
+            z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .hidden { display: none !important; }
+
+        /* Cipher board */
+        .cipher-char {
+            display: inline-flex; flex-direction: column; align-items: center;
+            margin: 2px; cursor: pointer; transition: all 0.15s;
+        }
+        .cipher-letter {
+            font-size: clamp(1rem, 3vw, 1.4rem);
+            font-weight: 800;
+            color: var(--accent);
+            text-shadow: 0 0 8px var(--accent);
+            line-height: 1.2;
+            min-width: 24px;
+            text-align: center;
+        }
+        .decoded-letter {
+            font-size: clamp(0.75rem, 2.5vw, 1rem);
+            font-weight: 700;
+            line-height: 1.2;
+            min-width: 24px;
+            text-align: center;
+            color: #fff;
+            border-bottom: 2px solid #1e3a1e;
+            padding-bottom: 1px;
+            transition: all 0.2s;
+            min-height: 1.3em;
+        }
+        .cipher-char.space { cursor: default; }
+        .cipher-char.space .cipher-letter { color: transparent; min-width: 12px; }
+        .cipher-char.space .decoded-letter { border: none; }
+
+        .cipher-char.selected .cipher-letter {
+            color: #000;
+            background: var(--accent);
+            border-radius: 3px;
+            padding: 0 3px;
+        }
+        .cipher-char.solved .decoded-letter { color: var(--accent); text-shadow: 0 0 6px var(--accent); }
+        .cipher-char.wrong .decoded-letter { color: var(--red); }
+
+        /* Mapping grid */
+        .map-slot {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 6px 8px;
+            border: 1px solid #1e3a1e;
+            background: #000;
+            cursor: pointer;
+            transition: all 0.15s;
+            border-radius: 4px;
+            min-width: 36px;
+        }
+        .map-slot:hover { border-color: var(--accent); background: var(--accent-dim); }
+        .map-slot.active-slot { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 10px rgba(163,230,53,0.3); }
+        .map-slot.mapped { border-color: rgba(163,230,53,0.4); }
+        .map-cipher { font-size: 10px; color: var(--accent); font-weight: 800; }
+        .map-plain { font-size: 12px; color: white; font-weight: 700; min-height: 16px; }
+
+        /* Keyboard */
+        .key-btn {
+            background: #0a140a;
+            border: 1px solid #1e3a1e;
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: clamp(10px, 2.5vw, 13px);
+            padding: clamp(6px, 1.5vw, 10px) clamp(8px, 2vw, 14px);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.1s;
+            user-select: none;
+        }
+        .key-btn:active { transform: scale(0.92); }
+        .key-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+        .key-btn.used { opacity: 0.25; pointer-events: none; background: #030803; }
+        .key-btn.key-clear { color: var(--red); border-color: #3a1515; }
+        .key-btn.key-clear:hover { background: rgba(239,68,68,0.15); }
+
+        .trace-bar { height: 3px; background: var(--accent); width: 100%; transition: width 1s linear; box-shadow: 0 0 8px var(--accent); }
+        .trace-bar.danger { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <header class="w-full bg-[#020d06] border-b border-lime-900/30 p-3 sm:p-4 flex justify-between items-center z-10">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black tracking-widest" style="color:#a3e635">CIPHER<span class="text-white">BREAK</span></h1>
+                <div class="text-[8px] sm:text-[10px] tracking-[0.3em]" style="color:#4d7c0f">SUBST_CIPHER // FREQ_ANALYSIS</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right">
+                <div class="text-[8px] sm:text-[10px] uppercase text-slate-500 tracking-widest mb-0.5">Level</div>
+                <div id="level-display" class="text-xl sm:text-2xl font-black text-white orbitron leading-none">01</div>
+            </div>
+        </div>
+    </header>
+
+    <div id="trace-container" class="w-full bg-lime-950/20 h-1 z-10">
+        <div id="trace-bar" class="trace-bar" style="width:100%"></div>
+    </div>
+
+    <main class="flex-1 flex flex-col gap-4 p-3 sm:p-5 max-w-4xl mx-auto w-full z-10">
+
+        <!-- Stats -->
+        <div class="flex gap-3 text-[10px] items-center">
+            <div class="panel px-4 py-2 flex gap-6">
+                <div><span class="text-slate-500">MAPPED</span> <span id="mapped-count" class="font-bold" style="color:#a3e635">0</span>/<span id="total-unique" class="text-white">0</span></div>
+                <div><span class="text-slate-500">CORRECT</span> <span id="correct-count" class="font-bold text-white">0</span></div>
+                <div><span class="text-slate-500">TIME</span> <span id="timer-display" class="font-bold text-white">90s</span></div>
+            </div>
+            <button onclick="window.getHint()" id="hint-btn" class="panel px-3 py-2 text-slate-400 hover:text-yellow-400 transition-colors text-[10px] tracking-widest">HINT [3]</button>
+        </div>
+
+        <!-- Cipher text display -->
+        <div class="panel p-4 sm:p-5">
+            <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-3">// ENCRYPTED TRANSMISSION</div>
+            <div id="cipher-board" class="flex flex-wrap gap-y-3 leading-none"></div>
+        </div>
+
+        <!-- Mapping grid -->
+        <div class="panel p-4 sm:p-5">
+            <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-3">// SYMBOL_MAP — Click a cipher letter above, then a key below</div>
+            <div id="map-grid" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Keyboard -->
+        <div class="panel p-3 sm:p-4">
+            <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-3">// PLAINTEXT_KEYS</div>
+            <div id="keyboard" class="flex flex-wrap gap-1.5 justify-center"></div>
+        </div>
+
+    </main>
+
+    <!-- WIN/LOSE Modal -->
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-8 max-w-sm w-full text-center">
+            <div id="result-icon" class="text-5xl mb-4">✅</div>
+            <h2 id="result-title" class="orbitron text-2xl font-black mb-2" style="color:#a3e635">DECRYPTED</h2>
+            <p id="result-sub" class="text-[11px] text-slate-400 mb-6 tracking-widest"></p>
+            <p id="result-plain" class="text-sm text-white font-bold mb-8 leading-relaxed bg-black/50 p-4 rounded border border-lime-900/50"></p>
+            <div class="flex gap-3">
+                <button onclick="window.nextLevel()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-black rounded" style="background:#a3e635">NEXT LEVEL</button>
+                <button onclick="window.restartGame()" class="flex-1 py-3 orbitron font-black text-xs tracking-widest text-slate-400 bg-black border border-slate-700 rounded hover:text-white">RESTART</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// PROTOCOL CIPHER — Substitution Cipher Cracking Game
+// ============================================================
+
+const PHRASES = [
+    "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG",
+    "ALL SYSTEMS NOMINAL INITIATING BREACH PROTOCOL",
+    "FIREWALL BYPASSED ACCESS GRANTED TO MAINFRAME",
+    "DATA EXFILTRATION COMPLETE TRACE ROUTE ACTIVE",
+    "NEURAL INTERFACE ONLINE SYNCING CORTEX NODES",
+    "INFILTRATION SUCCESSFUL UPLOADING PAYLOAD NOW",
+    "QUANTUM ENCRYPTION CRACKED BACKDOOR INSTALLED",
+    "SECURITY LAYER DISSOLVED CORE ACCESS ACHIEVED",
+    "SHADOW PROTOCOL ENGAGED GHOSTING ALL SIGNALS",
+    "OVERRIDE COMPLETE EXTRACTION SEQUENCE STARTING",
+    "DEEP PACKET INSPECTION BYPASSED ALL CLEAR",
+    "SYNTHETIC IDENTITY FORGED BIOMETRICS ACCEPTED",
+    "SATELLITE UPLINK JAMMED GROUND CONTROL OFFLINE",
+    "ZERO DAY EXPLOIT DEPLOYED PATCH WINDOW CLOSED",
+    "HONEYPOT DETECTED AND AVOIDED ROUTE RECALCULATED",
+];
+
+const TIME_LIMITS = [120, 110, 100, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35];
+const HINTS_PER_LEVEL = 3;
+
+let state = {};
+
+function buildCipher() {
+    const alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    const shuffled = [...alpha].sort(() => Math.random() - 0.5);
+    const enc = {}, dec = {};
+    alpha.forEach((c, i) => { enc[c] = shuffled[i]; dec[shuffled[i]] = c; });
+    return { enc, dec };
+}
+
+function initLevel(level) {
+    clearInterval(state.timer);
+    const phrase = PHRASES[(level - 1) % PHRASES.length];
+    const { enc, dec } = buildCipher();
+    const timeLimit = TIME_LIMITS[Math.min(level - 1, TIME_LIMITS.length - 1)];
+
+    state = {
+        level,
+        phrase,
+        enc, dec,
+        userMap: {},      // cipher -> plain guesses
+        timeLeft: timeLimit,
+        hints: HINTS_PER_LEVEL,
+        selectedCipher: null,
+        timer: null,
+    };
+
+    const cipherText = phrase.split('').map(c => c === ' ' ? ' ' : enc[c]).join('');
+    state.cipherText = cipherText;
+    state.uniqueCiphers = [...new Set(cipherText.split('').filter(c => c !== ' '))];
+
+    document.getElementById('level-display').textContent = String(level).padStart(2, '0');
+    document.getElementById('hint-btn').textContent = `HINT [${state.hints}]`;
+    document.getElementById('result-modal').classList.add('hidden');
+
+    renderBoard();
+    renderMapGrid();
+    renderKeyboard();
+    updateStats();
+    startTimer(timeLimit);
+}
+
+function renderBoard() {
+    const board = document.getElementById('cipher-board');
+    board.innerHTML = '';
+    state.cipherText.split('').forEach((c, i) => {
+        const el = document.createElement('div');
+        el.className = 'cipher-char' + (c === ' ' ? ' space' : '');
+        el.dataset.index = i;
+        if (c !== ' ') {
+            el.onclick = () => selectCipher(c);
+        }
+        el.innerHTML = `<div class="cipher-letter">${c === ' ' ? '&nbsp;' : c}</div><div class="decoded-letter" id="dec-${i}">&nbsp;</div>`;
+        board.appendChild(el);
+    });
+    refreshDecodedView();
+}
+
+function refreshDecodedView() {
+    state.cipherText.split('').forEach((c, i) => {
+        const el = document.getElementById(`dec-${i}`);
+        if (!el || c === ' ') return;
+        const mapped = state.userMap[c];
+        const correct = state.dec[c];
+        if (mapped) {
+            el.textContent = mapped;
+            el.style.color = mapped === correct ? '#a3e635' : '#ef4444';
+        } else {
+            el.innerHTML = '&nbsp;';
+            el.style.color = '';
+        }
+        // Mark cipher-char
+        const charEls = document.querySelectorAll(`.cipher-char[data-index="${i}"]`);
+        charEls.forEach(ce => {
+            ce.classList.toggle('solved', mapped === correct);
+            ce.classList.toggle('wrong', !!mapped && mapped !== correct);
+        });
+    });
+    // Highlight selected cipher
+    document.querySelectorAll('.cipher-char').forEach(el => {
+        const idx = parseInt(el.dataset.index);
+        if (isNaN(idx)) return;
+        const c = state.cipherText[idx];
+        el.classList.toggle('selected', c === state.selectedCipher);
+    });
+}
+
+function renderMapGrid() {
+    const grid = document.getElementById('map-grid');
+    grid.innerHTML = '';
+    state.uniqueCiphers.sort().forEach(c => {
+        const slot = document.createElement('div');
+        slot.className = 'map-slot';
+        slot.id = `mapslot-${c}`;
+        slot.onclick = () => selectCipher(c);
+        slot.innerHTML = `<div class="map-cipher">${c}</div><div class="map-plain" id="mapplain-${c}">&nbsp;</div>`;
+        grid.appendChild(slot);
+    });
+}
+
+function renderKeyboard() {
+    const kb = document.getElementById('keyboard');
+    kb.innerHTML = '';
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(k => {
+        const btn = document.createElement('button');
+        btn.className = 'key-btn';
+        btn.id = `key-${k}`;
+        btn.textContent = k;
+        btn.onclick = () => assignKey(k);
+        kb.appendChild(btn);
+    });
+    // Clear button
+    const clr = document.createElement('button');
+    clr.className = 'key-btn key-clear';
+    clr.textContent = '⌫ CLR';
+    clr.onclick = clearSelected;
+    kb.appendChild(clr);
+}
+
+function selectCipher(c) {
+    state.selectedCipher = (state.selectedCipher === c) ? null : c;
+    refreshDecodedView();
+    // Highlight map slots
+    document.querySelectorAll('.map-slot').forEach(s => s.classList.remove('active-slot'));
+    if (state.selectedCipher) {
+        const sl = document.getElementById(`mapslot-${state.selectedCipher}`);
+        if (sl) sl.classList.add('active-slot');
+    }
+}
+
+function assignKey(plainLetter) {
+    if (!state.selectedCipher) return;
+    // Remove any existing assignment of this plain letter to avoid duplicates
+    Object.keys(state.userMap).forEach(k => {
+        if (state.userMap[k] === plainLetter) delete state.userMap[k];
+    });
+    state.userMap[state.selectedCipher] = plainLetter;
+
+    // Update map slot display
+    const slot = document.getElementById(`mapplain-${state.selectedCipher}`);
+    if (slot) {
+        slot.textContent = plainLetter;
+        slot.style.color = (state.dec[state.selectedCipher] === plainLetter) ? '#a3e635' : '#ef4444';
+    }
+
+    refreshDecodedView();
+    updateStats();
+    checkWin();
+    // Auto-advance selection
+    const idx = state.uniqueCiphers.indexOf(state.selectedCipher);
+    const next = state.uniqueCiphers[idx + 1] || null;
+    state.selectedCipher = next;
+    refreshDecodedView();
+    if (next) {
+        document.querySelectorAll('.map-slot').forEach(s => s.classList.remove('active-slot'));
+        const sl = document.getElementById(`mapslot-${next}`);
+        if (sl) sl.classList.add('active-slot');
+    }
+}
+
+function clearSelected() {
+    if (!state.selectedCipher) return;
+    delete state.userMap[state.selectedCipher];
+    const slot = document.getElementById(`mapplain-${state.selectedCipher}`);
+    if (slot) { slot.innerHTML = '&nbsp;'; slot.style.color = ''; }
+    refreshDecodedView();
+    updateStats();
+}
+
+function updateStats() {
+    const mapped = Object.keys(state.userMap).length;
+    const correct = Object.keys(state.userMap).filter(k => state.userMap[k] === state.dec[k]).length;
+    document.getElementById('mapped-count').textContent = mapped;
+    document.getElementById('total-unique').textContent = state.uniqueCiphers.length;
+    document.getElementById('correct-count').textContent = correct;
+
+    // Refresh map slot borders
+    state.uniqueCiphers.forEach(c => {
+        const sl = document.getElementById(`mapslot-${c}`);
+        if (!sl) return;
+        if (state.userMap[c]) {
+            sl.classList.add('mapped');
+            const pl = sl.querySelector('.map-plain');
+            if (pl) pl.style.color = (state.userMap[c] === state.dec[c]) ? '#a3e635' : '#ef4444';
+        }
+    });
+}
+
+function checkWin() {
+    const allCorrect = state.uniqueCiphers.every(c => state.userMap[c] === state.dec[c]);
+    if (allCorrect) {
+        clearInterval(state.timer);
+        showResult(true);
+    }
+}
+
+function startTimer(seconds) {
+    const bar = document.getElementById('trace-bar');
+    const disp = document.getElementById('timer-display');
+    state.timeLeft = seconds;
+    bar.style.transition = 'none';
+    bar.style.width = '100%';
+    bar.classList.remove('danger');
+
+    state.timer = setInterval(() => {
+        state.timeLeft--;
+        disp.textContent = state.timeLeft + 's';
+        const pct = (state.timeLeft / seconds) * 100;
+        bar.style.transition = 'width 1s linear';
+        bar.style.width = pct + '%';
+        if (state.timeLeft <= 20) bar.classList.add('danger');
+        if (state.timeLeft <= 0) {
+            clearInterval(state.timer);
+            showResult(false);
+        }
+    }, 1000);
+}
+
+function showResult(win) {
+    const modal = document.getElementById('result-modal');
+    modal.classList.remove('hidden');
+    document.getElementById('result-icon').textContent = win ? '🔓' : '🔒';
+    document.getElementById('result-title').textContent = win ? 'DECRYPTED' : 'TRACE LOCKED';
+    document.getElementById('result-title').style.color = win ? '#a3e635' : '#ef4444';
+    const correct = Object.keys(state.userMap).filter(k => state.userMap[k] === state.dec[k]).length;
+    document.getElementById('result-sub').textContent = win
+        ? `LEVEL ${state.level} CLEARED — ${state.timeLeft}s REMAINING`
+        : `${correct}/${state.uniqueCiphers.length} SYMBOLS MAPPED`;
+    document.getElementById('result-plain').textContent = state.phrase;
+}
+
+window.getHint = function() {
+    if (state.hints <= 0) return;
+    const unmapped = state.uniqueCiphers.filter(c => state.userMap[c] !== state.dec[c]);
+    if (!unmapped.length) return;
+    const pick = unmapped[Math.floor(Math.random() * unmapped.length)];
+    state.userMap[pick] = state.dec[pick];
+    const slot = document.getElementById(`mapplain-${pick}`);
+    if (slot) { slot.textContent = state.dec[pick]; slot.style.color = '#a3e635'; }
+    state.hints--;
+    document.getElementById('hint-btn').textContent = `HINT [${state.hints}]`;
+    refreshDecodedView();
+    updateStats();
+    checkWin();
+};
+
+window.nextLevel = function() { initLevel(state.level + 1); };
+window.restartGame = function() { initLevel(1); };
+
+// Boot
+initLevel(1);
+</script>
+</body>
+</html>
+

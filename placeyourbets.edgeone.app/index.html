@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Royal Neon Casino — High-stakes wagering suite. Mines, Hi-Lo, Plinko, Mega Spin, Neon Roulette, Cyber Crash, Pro 21, Power Ball.">
+    <title>ROYAL NEON CASINO</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎰</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=Inter%253Awght@400%3B700%3B900&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root { --gold: #eab308; --gold-bright: #fde047; --bg: #050508; }
+        body { background-color: var(--bg); color: white; font-family: 'Inter', sans-serif; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Animated gold shimmer for lobby title */
+        @keyframes goldShimmer {
+            0%   { background-position: 200% center; }
+            100% { background-position: -200% center; }
+        }
+        .gold-shimmer {
+            background: linear-gradient(90deg, #eab308, #fde047, #f59e0b, #fde047, #eab308);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: goldShimmer 4s linear infinite;
+        }
+
+        /* Nav neon pulse */
+        @keyframes navPulse {
+            0%,100% { box-shadow: 0 1px 0 0 rgba(234,179,8,0.15); }
+            50%      { box-shadow: 0 1px 0 0 rgba(234,179,8,0.4); }
+        }
+        .casino-nav { animation: navPulse 3s ease-in-out infinite; }
+
+        /* Floating particles behind lobby */
+        .casino-particle {
+            position: fixed; pointer-events: none; z-index: 0;
+            border-radius: 50%;
+            animation: float-particle linear infinite;
+        }
+        @keyframes float-particle {
+            0%   { transform: translateY(110vh) rotate(0deg); opacity:0; }
+            10%  { opacity:0.6; }
+            90%  { opacity:0.3; }
+            100% { transform: translateY(-10vh) rotate(720deg); opacity:0; }
+        }
+
+        .btn-gold { background: var(--gold); color: black; font-weight: 900; transition: all 0.2s; border-radius: 12px; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .btn-gold:active { transform: scale(0.96); }
+        .btn-gold:disabled { opacity: 0.5; pointer-events: none; }
+        .glass-panel { background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255,255,255,0.05); border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); backdrop-filter: blur(10px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .hidden { display: none !important; }
+
+        /* Mines */
+        .mine-tile { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border-radius: 8px; background: #11111a; border: 1px solid #333; cursor: pointer; transition: transform 0.1s; user-select: none; }
+        .mine-tile:active { transform: scale(0.9); }
+        .revealed-diamond { background: var(--gold) !important; color: black !important; box-shadow: 0 0 15px var(--gold); border: none !important; }
+        .revealed-bomb { background: #e11d48 !important; color: white !important; border: none !important; box-shadow: 0 0 15px #e11d48; }
+        
+        /* Cards */
+        .casino-card { width: 70px; height: 100px; background: white; color: black; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; padding: 6px; font-weight: 900; box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-size: 1rem; }
+        .casino-card.mini { width: 45px; height: 65px; padding: 4px; font-size: 0.7rem; border-radius: 4px; border: 1px solid #ccc; }
+        .red-card { color: #e11d48; }
+        
+        /* Slots */
+        .slot-window { height: 140px; overflow: hidden; position: relative; background: #000; border-radius: 16px; border: 2px solid #333; box-shadow: inset 0 0 20px #000; }
+        .slot-strip { display: flex; flex-direction: column; align-items: center; will-change: transform, filter; }
+        .slot-symbol { height: 140px; display: flex; align-items: center; justify-content: center; font-size: 5rem; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .is-spinning { transition: transform 2.5s cubic-bezier(0.1, 0.8, 0.2, 1); filter: blur(4px); }
+        .jackpot-glow { animation: jpGlow 1s infinite alternate; }
+        @keyframes jpGlow { from { box-shadow: 0 0 20px #eab308; border-color: #eab308; } to { box-shadow: 0 0 50px #eab308; border-color: #fff; } }
+
+        /* Roulette */
+        .roulette-cell { display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 0.85rem; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); user-select: none; transition: background 0.2s; }
+        .roulette-cell:active { transform: scale(0.95); }
+        .active-bet { box-shadow: inset 0 0 15px var(--gold); border: 2px solid var(--gold); background: rgba(234, 179, 8, 0.2); }
+        .r-red { background: #e11d48; color: white; } .r-blk { background: #111; color: white; } .r-grn { background: #10b981; color: white; }
+        
+        /* Plinko & Crash Canvas */
+        canvas { background: #020203; border-radius: 1.5rem; border: 1px solid #1a1a1a; box-shadow: inset 0 0 40px #000; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <nav class="casino-nav bg-[#07070d] border-b border-yellow-500/20 px-4 md:px-6 py-4 flex justify-between items-center sticky top-0 z-[100]" style="background:linear-gradient(to right,#070709,#0a0906,#070709);">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-600 hover:text-yellow-500 border border-slate-800 hover:border-yellow-500/40 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div class="flex items-center gap-3 cursor-pointer" onclick="window.switchView('lobby')">
+                <div class="bg-yellow-500 p-2 rounded-lg text-black" style="box-shadow:0 0 20px rgba(234,179,8,0.5), 0 0 40px rgba(234,179,8,0.2);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 3h12l4 6-10 12L2 9z"/></svg>
+                </div>
+                <div>
+                    <h1 class="orbitron text-xl font-black tracking-tight uppercase hidden sm:flex items-center gap-1">
+                        <span class="text-white">ROYAL</span><span class="gold-shimmer">NEON</span>
+                    </h1>
+                    <div class="text-[8px] text-yellow-700 orbitron tracking-[0.3em] hidden sm:block">CASINO // EST. 2026</div>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="border border-yellow-500/20 px-5 py-2 rounded-full text-yellow-500 font-black orbitron text-sm" style="background:rgba(234,179,8,0.05);box-shadow:0 0 15px rgba(234,179,8,0.05);">
+                $<span id="bal-text">---</span>
+            </div>
+            <button onclick="window.openDeposit()" class="bg-yellow-500 text-black px-5 py-2.5 rounded-full font-black text-[10px] uppercase active:scale-95 transition-transform" style="box-shadow:0 0 20px rgba(234,179,8,0.3);">+ CHIPS</button>
+        </div>
+    </nav>
+
+    <main class="p-4 md:p-8 max-w-7xl mx-auto w-full min-h-[75vh] flex flex-col items-center">
+        <!-- LOBBY -->
+        <div id="lobby-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+            <div onclick="window.switchView('mines')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-sky-500 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-sky-500/10 text-sky-400 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Blockbreaker</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Grid Sweeper</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('hilo')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-purple-500 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-purple-500/10 text-purple-400 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="m8 17 4 4 4-4"/></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Hi-Lo Protocol</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Card Prediction</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('plinko')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-blue-600 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-blue-500/10 text-blue-400 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Lucky Drop</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Physics Board</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('slots')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-yellow-500 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-yellow-500/10 text-yellow-500 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Mega Spin</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Mechanical Reels</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('roulette')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-red-600 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-red-500/10 text-red-500 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Neon Roulette</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Table Game</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('crash')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-orange-600 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-orange-500/10 text-orange-500 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Cyber Crash</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Multiplier Climb</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('blackjack')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-rose-600 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-rose-500/10 text-rose-500 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 11c0-4 4-9 7-9s7 5 7 9c0 5-7 11-7 11s-7-6-7-11Z"/><path d="M12 22v-4"/></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Pro 21</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Card Game</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+            <div onclick="window.switchView('keno')" class="bg-[#0f0f15] border border-white/5 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-yellow-500/50 hover:-translate-y-1 transition-all group">
+                <div class="h-2 w-full bg-gradient-to-r from-emerald-600 to-transparent"></div>
+                <div class="p-8"><div class="mb-4 p-4 bg-emerald-500/10 text-emerald-500 rounded-xl w-fit"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></div><h3 class="orbitron text-lg font-black mb-1 uppercase">Power Ball</h3><p class="text-[9px] text-slate-500 uppercase font-bold mb-6 tracking-widest">Keno Matrix</p><div class="bg-white/5 py-4 rounded-xl text-[10px] font-black text-center group-hover:bg-yellow-500 group-hover:text-black transition-all">PLAY</div></div>
+            </div>
+        </div>
+
+        <div id="game-view" class="hidden w-full max-w-6xl"></div>
+    </main>
+
+    <!-- Modals -->
+    <div id="modal-dep" class="modal-overlay hidden">
+        <div class="bg-[#11111a] border border-white/10 p-8 rounded-3xl w-full max-w-sm m-4 shadow-2xl">
+            <h2 class="orbitron text-xl font-black mb-6 text-yellow-500 uppercase text-center">Deposit Credits</h2>
+            <input type="number" id="dep-in" value="500" class="w-full bg-black border border-white/10 p-4 rounded-xl text-yellow-500 font-black text-3xl text-center outline-none mb-6">
+            <button onclick="window.confirmDep()" class="w-full btn-gold py-4 mb-2">Confirm</button>
+            <button onclick="window.toggleDeposit(false)" class="w-full text-slate-500 py-3 text-xs font-bold uppercase tracking-widest bg-transparent border-none cursor-pointer hover:text-white">Cancel</button>
+        </div>
+    </div>
+
+    <div id="modal-tut" class="modal-overlay hidden">
+        <div class="bg-[#151520] border border-sky-500/30 p-8 rounded-[2rem] w-full max-w-lg m-4 shadow-2xl relative">
+            <h2 id="tut-title" class="orbitron text-2xl font-black text-sky-400 mb-4 uppercase italic"></h2>
+            <div id="tut-body" class="text-slate-300 text-sm leading-relaxed mb-8 font-medium"></div>
+            <button onclick="window.hideTut()" class="w-full bg-sky-600 hover:bg-sky-500 text-black font-black py-4 rounded-xl uppercase tracking-widest">START PLAYING</button>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-3 bg-sky-500 text-black font-black text-[10px] tracking-widest uppercase rounded-full transition-all duration-300 opacity-0 translate-y-10 z-[2000] shadow-xl pointer-events-none"></div>
+
+    <script>
+        (function() {
+            let balance = 1000;
+            let seenTuts = {};
+            let currentView = 'lobby';
+            let activeTimers = [];
+            
+            window.SYMBOLS = ['🍒', '🍋', '🔔', '💎', '7️⃣', '🎰', '🍉', '⭐'];
+            window.PLINKO_PAYOUTS = [8, 4, 2, 1.2, 0.5, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.5, 1.2, 2, 4, 8];
+
+            const TUTS = {
+                mines: ["BLOCKBREAKER", "Select your grid size. Click tiles to find diamonds and increase your multiplier. If you click a bomb, you lose your wager. Cash out at any time to secure your current winnings."],
+                hilo: ["HI-LO PROTOCOL", "A card is drawn from a standard 52-card deck. Predict whether the next card will be Higher or Lower. Build a streak to increase your payout. Ties result in a loss."],
+                crash: ["CYBER CRASH", "Place your bet and watch the multiplier climb. You must eject before the system crashes to win your bet multiplied by the current value. The crash point is randomized."],
+                plinko: ["LUCKY DROP", "Drop balls through the peg board. The ball bounces down into a multiplier bucket at the bottom. Outer buckets offer the highest payouts."],
+                slots: ["MEGA SPIN", "Spin the mechanical reels. Match 3 symbols to win the Grand Jackpot (20x). Matching any 2 symbols pays a smaller pair reward (1.5x)."],
+                roulette: ["NEON ROULETTE", "Classic European Roulette featuring numbers 0-36. Select numbers on the grid to place bets. A winning straight-up number pays 35 to 1."],
+                blackjack: ["PRO 21", "Beat the dealer to 21 without going over. The dealer must draw to 16 and stand on 17. A natural Blackjack pays 3 to 2. You may Double Down on your initial two cards."],
+                keno: ["POWER BALL", "Select up to 10 numbers from the 80-number matrix. The system will draw 20 random numbers. The more numbers you match, the higher your payout."]
+            };
+
+            try {
+                let b = localStorage.getItem('rn_v14_bal'); if(b) balance = parseFloat(b);
+                let t = localStorage.getItem('rn_v14_tut'); if(t) seenTuts = JSON.parse(t);
+            } catch(e){}
+            
+            function sync() {
+                document.getElementById('bal-text').innerText = balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+                try { localStorage.setItem('rn_v14_bal', balance); localStorage.setItem('rn_v14_tut', JSON.stringify(seenTuts)); } catch(e){}
+            }
+            sync();
+
+            window.showToast = (m) => {
+                const t = document.getElementById('toast'); t.innerText = m;
+                t.classList.remove('opacity-0', 'translate-y-10'); t.classList.add('opacity-100', 'translate-y-0');
+                setTimeout(() => { t.classList.remove('opacity-100', 'translate-y-0'); t.classList.add('opacity-0', 'translate-y-10'); }, 2500);
+            };
+            
+            window.updateBalance = (amt) => { balance += amt; sync(); };
+
+            window.toggleDeposit = (s) => document.getElementById('modal-dep').classList.toggle('hidden', !s);
+            window.openDeposit = () => window.toggleDeposit(true);
+            window.confirmDep = () => { let v = parseFloat(document.getElementById('dep-in').value); if(v>0){ window.updateBalance(v); window.showToast(`+$${v} CREDITED`); window.toggleDeposit(false); } };
+
+            window.switchView = function(v) {
+                currentView = v;
+                activeTimers.forEach(t => { clearInterval(t); cancelAnimationFrame(t); }); activeTimers = [];
+                const lobby = document.getElementById('lobby-grid'), game = document.getElementById('game-view');
+
+                if(v === 'lobby') {
+                    game.innerHTML = ''; game.classList.add('hidden'); lobby.classList.remove('hidden');
+                } else {
+                    lobby.classList.add('hidden'); game.classList.remove('hidden'); game.innerHTML = '';
+                    if(v === 'mines') launchMines(game);
+                    else if(v === 'hilo') launchHilo(game);
+                    else if(v === 'plinko') launchPlinko(game);
+                    else if(v === 'slots') launchSlots(game);
+                    else if(v === 'roulette') launchRoulette(game);
+                    else if(v === 'crash') launchCrash(game);
+                    else if(v === 'blackjack') launchBlackjack(game);
+                    else if(v === 'keno') launchKeno(game);
+
+                    if(!seenTuts[v]) {
+                        document.getElementById('tut-title').innerText = TUTS[v][0];
+                        document.getElementById('tut-body').innerHTML = TUTS[v][1];
+                        document.getElementById('modal-tut').classList.remove('hidden');
+                    }
+                }
+            };
+
+            window.hideTut = () => { seenTuts[currentView] = true; sync(); document.getElementById('modal-tut').classList.add('hidden'); };
+
+            // --- 1. BLOCKBREAKER (MINES) ---
+            function launchMines(c) {
+                let st = { a: false, b: 10, sz: 5, gems: 0, m: 0, bombs: [] };
+                const render = () => {
+                    const total = st.sz * st.sz;
+                    c.innerHTML = `<div class="flex flex-col lg:flex-row gap-10 items-center justify-center animate-in fade-in w-full">
+                        <div class="glass-panel p-4 md:p-6 w-full max-w-[500px] flex justify-center">
+                            <div id="m-g" class="grid gap-2 w-full aspect-square" style="grid-template-columns: repeat(${st.sz}, 1fr);">
+                                ${Array.from({length: total}, (_,i)=>`<div onclick="window.mHit(${i})" id="mt-${i}" class="mine-tile text-${st.sz>5?'sm':'xl'} font-black">?</div>`).join('')}
+                            </div>
+                        </div>
+                        <div class="w-full lg:w-80 space-y-6 glass-panel p-8">
+                            <h2 class="orbitron text-2xl font-black text-sky-400 uppercase italic">Blockbreaker</h2>
+                            <div class="flex justify-between items-center bg-black/50 p-3 rounded-xl border border-white/5">
+                                <span class="text-xs text-slate-400 font-bold uppercase">Grid Size</span>
+                                <select id="m-sz" onchange="window.mSz(this.value)" class="bg-transparent text-white font-bold outline-none cursor-pointer" ${st.a?'disabled':''}>
+                                    ${[3,4,5,6,7].map(n=>`<option value="${n}" class="bg-slate-900" ${st.sz==n?'selected':''}>${n}x${n}</option>`).join('')}
+                                </select>
+                            </div>
+                            <input type="number" id="m-in" value="${st.b}" class="w-full bg-black/50 border border-white/5 p-4 rounded-xl text-yellow-500 font-black text-center text-xl outline-none" ${st.a?'disabled':''}>
+                            <div class="text-center bg-black/80 p-6 rounded-2xl border border-sky-500/20">
+                                <div class="text-[10px] text-sky-500/70 font-bold uppercase mb-1">Current Payout</div>
+                                <div id="m-val" class="orbitron text-4xl font-black text-white">${st.m.toFixed(2)}x</div>
+                            </div>
+                            <div id="m-act"><button onclick="window.mS()" class="w-full btn-gold py-5">START GAME</button></div>
+                        </div>
+                    </div>`;
+                };
+                window.mSz = (v) => { st.sz = parseInt(v); render(); };
+                window.mS = () => {
+                    st.b = parseFloat(document.getElementById('m-in').value); if(balance<st.b) return window.showToast("INSUFFICIENT FUNDS");
+                    window.updateBalance(-st.b); st.a=true; st.gems=0; st.m=0; st.bombs=[];
+                    const total = st.sz*st.sz; const bc = Math.floor(total * 0.3); // ~1/3 bombs
+                    while(st.bombs.length<bc){let r=Math.floor(Math.random()*total); if(!st.bombs.includes(r)) st.bombs.push(r);}
+                    document.querySelectorAll('.mine-tile').forEach(t=>{t.innerText='?';t.className='mine-tile text-'+(st.sz>5?'sm':'xl')+' font-black';}); 
+                    document.getElementById('m-act').innerHTML=`<button onclick="window.mC()" class="w-full bg-emerald-500 text-black font-black py-5 rounded-xl uppercase transition-transform active:scale-95">CASH OUT</button>`;
+                    document.getElementById('m-val').innerText='0.00x';
+                };
+                window.mHit = (i) => {
+                    if(!st.a) return; const el=document.getElementById(`mt-${i}`); if(el.classList.contains('revealed-diamond')) return;
+                    if(st.bombs.includes(i)){ 
+                        st.a=false; 
+                        st.bombs.forEach(b => { const e=document.getElementById(`mt-${b}`); e.innerText='💣'; e.classList.add('revealed-bomb'); });
+                        window.showToast("BOMB HIT!"); setTimeout(render, 2500); 
+                    } else { 
+                        el.innerText='💎'; el.classList.add('revealed-diamond'); st.gems++; 
+                        const total = st.sz*st.sz; 
+                        const safe = total - st.bombs.length;
+                        const targetROI = Math.ceil(safe * 0.3); 
+                        
+                        if(st.gems < targetROI) {
+                            st.m = (st.gems / targetROI) * 0.8; 
+                        } else {
+                            let p=1; for(let k=0;k<st.gems;k++) p*=(total-st.bombs.length-k)/(total-k); 
+                            const trueMult = 1/p;
+                            st.m = 1.0 + (st.gems - targetROI) * ((trueMult - 1.0) / (safe - targetROI)) * 0.9;
+                        }
+                        
+                        document.getElementById('m-val').innerText=st.m.toFixed(2)+'x'; 
+                    }
+                };
+                window.mC = () => { if(!st.a) return; window.updateBalance(st.b*st.m); st.a=false; window.showToast("COLLECTED"); render(); };
+                render();
+            }
+
+            // --- 2. HI-LO PROTOCOL ---
+            function launchHilo(c) {
+                let st = { a: false, b: 10, m: 0, cur: null, hist: [], streak: 0 };
+                const suits=['♠','♥','♦','♣'], vals=['A','2','3','4','5','6','7','8','9','10','J','Q','K']; // Ace is 1
+                const valMap={'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13};
+                const buildDeck = () => { let d=[]; suits.forEach(s=>vals.forEach(v=>d.push({v,s}))); return d.sort(()=>Math.random()-0.5); };
+                
+                if(!window.hiloDeck || window.hiloDeck.length < 15) window.hiloDeck = buildDeck();
+
+                const render = () => {
+                    const isR = st.cur && (st.cur.s==='♥'||st.cur.s==='♦');
+                    c.innerHTML=`<div class="flex flex-col items-center gap-6 py-6 animate-in fade-in w-full max-w-4xl">
+                        <div class="flex flex-col md:flex-row gap-10 items-center justify-center w-full">
+                            <div class="flex flex-col items-center gap-4">
+                                <div class="flex gap-6 items-center h-[280px]">
+                                    <div id="h-c" class="casino-card ${isR?'red-card':''}" style="transform: scale(2.2); border: 2px solid #333;">
+                                        ${st.cur ? `<span>${st.cur.v}</span><span class="text-5xl self-center">${st.cur.s}</span><span class="self-end rotate-180">${st.cur.v}</span>` : '?'}
+                                    </div>
+                                    <div id="h-loss" class="hidden casino-card opacity-80" style="transform: scale(2.2); border: 2px solid #e11d48;"></div>
+                                </div>
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest">Cards Remaining: ${window.hiloDeck.length}</div>
+                            </div>
+                            <div class="w-full max-w-sm glass-panel p-8">
+                                <div class="bg-black/50 p-6 rounded-2xl border border-white/5 text-center mb-6">
+                                    <div class="text-[10px] text-slate-500 font-black uppercase mb-1">Multiplier</div>
+                                    <div id="h-val" class="orbitron text-5xl text-yellow-500">${st.m.toFixed(2)}x</div>
+                                </div>
+                                <div id="h-ctrl">
+                                    <input type="number" id="h-in" value="${st.b}" class="w-full bg-black border border-white/10 p-4 rounded-xl text-yellow-500 text-center text-xl font-bold mb-4 outline-none">
+                                    <button onclick="window.hS()" class="w-full btn-gold py-5">DEAL START</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="w-full bg-black/40 p-4 rounded-2xl border border-white/5 mt-4">
+                            <div class="text-[10px] text-slate-500 uppercase mb-2 font-bold pl-2">History Log</div>
+                            <div class="flex gap-2 overflow-x-auto items-center pb-2 px-2">
+                                ${st.hist.map(card => `<div class="casino-card mini ${card.s==='♥'||card.s==='♦'?'red-card':''} shrink-0 border border-white/10"><span>${card.v}</span><span class="text-xl self-center">${card.s}</span></div>`).join('')}
+                                ${st.hist.length === 0 ? '<span class="text-xs text-slate-600 italic">No history</span>' : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                };
+
+                window.hS=()=>{ 
+                    st.b=parseFloat(document.getElementById('h-in').value); if(balance<st.b) return window.showToast("INSUFFICIENT FUNDS"); 
+                    window.updateBalance(-st.b); st.a=true; st.m=0.00; st.streak=0; st.hist=[]; 
+                    if(window.hiloDeck.length < 10) window.hiloDeck = buildDeck();
+                    st.cur=window.hiloDeck.pop(); 
+                    hUI(); 
+                };
+
+                const hUI = () => { 
+                    render();
+                    if(st.a) {
+                        document.getElementById('h-ctrl').innerHTML=`<div class="grid grid-cols-2 gap-4 mb-4"><button onclick="window.hGu(true)" class="bg-emerald-600 hover:bg-emerald-500 py-5 rounded-xl font-black text-white uppercase transition-colors">Higher</button><button onclick="window.hGu(false)" class="bg-rose-600 hover:bg-rose-500 py-5 rounded-xl font-black text-white uppercase transition-colors">Lower</button></div><button onclick="window.hC()" class="w-full bg-white/10 hover:bg-white/20 py-4 rounded-xl font-bold uppercase text-white transition-colors">Cash Out</button>`;
+                    }
+                };
+
+                window.hGu=(hi)=>{ 
+                    if(window.hiloDeck.length === 0) window.hiloDeck = buildDeck();
+                    const n=window.hiloDeck.pop(); 
+                    const cV=valMap[st.cur.v], nV=valMap[n.v]; 
+                    
+                    if(cV===nV){
+                        st.a=false; st.hist.unshift(st.cur);
+                        showLoss(n); window.showToast("TIE! YOU LOSE.");
+                        return;
+                    } 
+                    const win = hi ? (nV>cV) : (nV<cV); 
+                    
+                    if(win){
+                        st.streak++;
+                        if (st.streak < 5) st.m = st.streak * 0.2;
+                        else if (st.streak === 5) st.m = 1.0;
+                        else st.m = 1.0 + Math.pow(1.5, st.streak - 5) * 0.5;
+                        
+                        st.hist.unshift(st.cur); st.cur=n; hUI(); window.showToast("CORRECT");
+                    } else {
+                        st.a=false; st.hist.unshift(st.cur);
+                        showLoss(n); window.showToast("WRONG.");
+                    }
+                };
+                window.hC=()=>{ if(!st.a) return; window.updateBalance(st.b*st.m); st.a=false; window.showToast("COLLECTED"); render(); };
+                
+                const showLoss = (bustingCard) => {
+                    render();
+                    const isR = bustingCard.s==='♥'||bustingCard.s==='♦';
+                    const lossEl = document.getElementById('h-loss');
+                    lossEl.innerHTML = `<span>${bustingCard.v}</span><span class="text-5xl self-center">${bustingCard.s}</span><span class="self-end rotate-180">${bustingCard.v}</span>`;
+                    lossEl.className = `casino-card ${isR?'red-card':''}`;
+                    lossEl.classList.remove('hidden');
+                    setTimeout(()=>render(), 3500);
+                }
+                render();
+            }
+
+            // --- 3. PLINKO ---
+            function launchPlinko(c) {
+                c.innerHTML=`<div class="flex flex-col lg:flex-row items-center gap-10 animate-in fade-in">
+                    <div class="glass-panel p-6 relative">
+                        <canvas id="p-c" width="600" height="560"></canvas>
+                    </div>
+                    <div class="w-full lg:w-72 glass-panel p-8 space-y-6">
+                        <h2 class="orbitron text-2xl font-black text-sky-400 uppercase italic">Lucky Drop</h2>
+                        <input type="number" id="p-b" value="10" class="w-full bg-black/50 border border-white/5 p-4 text-yellow-500 font-bold text-center text-xl rounded-xl outline-none">
+                        <button onclick="window.pDr()" class="w-full btn-gold py-5">DROP BALL</button>
+                    </div>
+                </div>`;
+                
+                const ctx=document.getElementById('p-c').getContext('2d'); 
+                
+                let balls=[], pegs=[];
+                const rows = 16, spacingX = 32, spacingY = 30, startX = 300, startY = 40;
+                
+                for(let r=0; r<rows; r++){ 
+                    const rowWidth = r * spacingX;
+                    const rx = startX - (rowWidth/2);
+                    for(let j=0; j<=r; j++) pegs.push({x: rx + j*spacingX, y: startY + r*spacingY, r: 3.5, glow: 0}); 
+                }
+
+                function L(){ 
+                    if(currentView!=='plinko')return; 
+                    ctx.clearRect(0,0,600,560); 
+                    
+                    window.PLINKO_PAYOUTS.forEach((p, i) => {
+                        const bx2 = 44 + i * 32; 
+                        ctx.fillStyle = p >= 1 ? 'rgba(234, 179, 8, 0.15)' : 'rgba(255, 255, 255, 0.05)';
+                        ctx.roundRect ? ctx.roundRect(bx2 - 14, 520, 28, 24, 4) : ctx.fillRect(bx2 - 14, 520, 28, 24);
+                        ctx.fill();
+
+                        ctx.fillStyle = p >= 1 ? '#eab308' : '#94a3b8';
+                        ctx.font = '900 11px Inter';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(p + 'x', bx2, 532);
+                    });
+
+                    pegs.forEach(p=>{
+                        if(p.glow > 0) {
+                            ctx.beginPath(); ctx.arc(p.x, p.y, p.r + p.glow * 6, 0, 7);
+                            ctx.fillStyle = `rgba(14, 165, 233, ${p.glow})`; ctx.fill();
+                            p.glow -= 0.05;
+                        }
+                        ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fillStyle='#f8fafc';ctx.fill();
+                    });
+                    
+                    balls.forEach((b,i)=>{ 
+                        b.vy+=0.1;
+                        b.x+=b.vx; b.y+=b.vy; 
+                        
+                        b.trail.push({x:b.x, y:b.y});
+                        if(b.trail.length > 10) b.trail.shift();
+
+                        const L_bound = startX - (b.y - startY)/2 - 20;
+                        const R_bound = startX + (b.y - startY)/2 + 20;
+                        if(b.x < L_bound) { b.x = L_bound; b.vx = Math.abs(b.vx)*0.8; }
+                        if(b.x > R_bound) { b.x = R_bound; b.vx = -Math.abs(b.vx)*0.8; }
+
+                        pegs.forEach(p=>{
+                            const dx=b.x-p.x, dy=b.y-p.y, dist=Math.hypot(dx,dy);
+                            if(dist < b.r+p.r){ 
+                                p.glow = 1.0; 
+                                const overlap = (b.r+p.r) - dist;
+                                const nx = dx/dist, ny = dy/dist;
+                                b.x += nx*overlap; b.y += ny*overlap;
+                                const dot = b.vx*nx + b.vy*ny;
+                                b.vx = (b.vx - 2*dot*nx) * 0.7 + (Math.random()-0.5)*2.0; 
+                                b.vy = (b.vy - 2*dot*ny) * 0.7;
+                            }
+                        });
+
+                        if(b.trail.length > 1) {
+                            ctx.beginPath(); ctx.moveTo(b.trail[0].x, b.trail[0].y);
+                            for(let t=1; t<b.trail.length; t++) ctx.lineTo(b.trail[t].x, b.trail[t].y);
+                            ctx.strokeStyle = 'rgba(14, 165, 233, 0.5)'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
+                        }
+
+                        ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fillStyle='#0ea5e9';
+                        ctx.shadowBlur=15; ctx.shadowColor='#0ea5e9'; ctx.fill(); ctx.shadowBlur=0;
+                        
+                        if(b.y>515){ 
+                            let buck=Math.floor((b.x-28)/32); 
+                            buck=Math.max(0,Math.min(window.PLINKO_PAYOUTS.length-1,buck)); 
+                            const win = b.bet*window.PLINKO_PAYOUTS[buck];
+                            window.updateBalance(win); 
+                            if(win >= b.bet) window.showToast(`WIN: $${win.toFixed(2)}`);
+                            balls.splice(i,1); 
+                        } 
+                    });
+                    activeTimers.push(requestAnimationFrame(L)); 
+                } L();
+
+                window.pDr=()=>{ 
+                    let b=parseFloat(document.getElementById('p-b').value); if(balance<b) return window.showToast("INSUFFICIENT FUNDS"); 
+                    window.updateBalance(-b); 
+                    balls.push({x:startX+(Math.random()-0.5)*15, y:10, vx:(Math.random()-0.5)*1.5, vy:1, r:4.5, bet:b, trail:[]}); 
+                };
+            }
+
+            // --- 4. SLOTS ---
+            function launchSlots(c) {
+                let sp=false;
+                const STRIP_LEN = 25;
+                c.innerHTML=`<div class="flex flex-col items-center gap-10 py-10 animate-in fade-in">
+                    <div class="glass-panel p-10 w-full max-w-3xl text-center relative" id="slot-machine">
+                        <div class="absolute inset-0 border-4 border-slate-800 rounded-[24px] pointer-events-none transition-colors" id="slot-glow"></div>
+                        <div class="grid grid-cols-3 gap-4 mb-10 h-36 overflow-hidden relative rounded-xl border-y-4 border-slate-900 bg-black">
+                            <div class="absolute top-1/2 left-0 w-full h-1 bg-red-500/50 -translate-y-1/2 z-10 shadow-[0_0_10px_red]"></div>
+                            ${[0,1,2].map(i=>`
+                                <div class="slot-strip relative" id="str-${i}" style="transform: translateY(0)">
+                                    <div class="slot-symbol">🍒</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="flex gap-4 items-center relative z-20">
+                            <input type="number" id="s-b" value="10" class="w-1/3 bg-black/50 border border-white/10 p-5 text-yellow-500 text-2xl font-black text-center rounded-2xl outline-none">
+                            <button onclick="window.sSp()" id="s-btn" class="w-2/3 btn-gold py-6 text-xl">SPIN REELS</button>
+                        </div>
+                    </div>
+                </div>`;
+
+                window.sSp=()=>{ 
+                    if(sp) return; let b=parseFloat(document.getElementById('s-b').value); if(balance<b) return window.showToast("INSUFFICIENT FUNDS"); 
+                    window.updateBalance(-b); sp=true; 
+                    const btn = document.getElementById('s-btn'); btn.disabled=true; btn.innerText="SPINNING...";
+                    document.getElementById('slot-glow').classList.remove('jackpot-glow');
+
+                    const res = [Math.floor(Math.random()*8), Math.floor(Math.random()*8), Math.floor(Math.random()*8)];
+                    
+                    [0,1,2].forEach(i => {
+                        const strip = document.getElementById(`str-${i}`);
+                        let html = '';
+                        for(let k=0; k<STRIP_LEN; k++) html += `<div class="slot-symbol">${window.SYMBOLS[Math.floor(Math.random()*8)]}</div>`;
+                        html += `<div class="slot-symbol">${window.SYMBOLS[res[i]]}</div>`;
+                        
+                        strip.style.transition = 'none';
+                        strip.style.transform = `translateY(0px)`;
+                        strip.innerHTML = html;
+                        void strip.offsetHeight; 
+                        
+                        strip.classList.add('is-spinning');
+                        strip.style.transitionDuration = `${2.5 + i*0.5}s`;
+                        strip.style.transform = `translateY(-${STRIP_LEN * 140}px)`;
+                        
+                        setTimeout(() => strip.classList.remove('is-spinning'), (2.5 + i*0.5)*1000 - 300);
+                    });
+
+                    setTimeout(()=>{ 
+                        if(res[0]===res[1]&&res[1]===res[2]){ window.updateBalance(b*20); window.showToast("JACKPOT! 20x"); document.getElementById('slot-glow').classList.add('jackpot-glow'); }
+                        else if(res[0]===res[1]||res[1]===res[2]||res[0]===res[2]){ window.updateBalance(b*1.5); window.showToast("PAIR 1.5x"); } 
+                        sp=false; btn.disabled=false; btn.innerText="SPIN REELS";
+                    }, 3600); 
+                };
+            }
+
+            // --- 5. NEON ROULETTE ---
+            function launchRoulette(c) {
+                let bets = new Map(), sp=false;
+                const rLayout = [
+                    [3,6,9,12,15,18,21,24,27,30,33,36],
+                    [2,5,8,11,14,17,20,23,26,29,32,35],
+                    [1,4,7,10,13,16,19,22,25,28,31,34]
+                ];
+                const redNums = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+                const order = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+                
+                let grad = 'conic-gradient(from 0deg, ';
+                order.forEach((n, i) => {
+                    const s = i * (360/37), e = (i+1) * (360/37);
+                    const col = n===0 ? '#10b981' : (redNums.includes(n) ? '#e11d48' : '#111');
+                    grad += `${col} ${s}deg ${e}deg${i===36?'':', '}`;
+                });
+                grad += ')';
+
+                c.innerHTML = `<div class="flex flex-col items-center gap-10 py-6 animate-in fade-in">
+                    <div class="flex flex-col md:flex-row gap-10 items-center">
+                        <div class="w-56 h-56 rounded-full border-[10px] border-black flex items-center justify-center orbitron text-5xl font-black relative shadow-[0_0_40px_rgba(234,179,8,0.2)] overflow-hidden" id="r-wheel" style="background: ${grad}; transition: transform 5s cubic-bezier(0.1, 0.9, 0.2, 1);">
+                            <div class="absolute w-40 h-40 bg-black rounded-full flex flex-col items-center justify-center z-10 shadow-[0_0_20px_black]">
+                                <span class="text-[10px] text-slate-500 uppercase tracking-widest">Result</span>
+                                <span id="r-res" class="orbitron text-5xl font-black text-white">?</span>
+                            </div>
+                            <div id="r-ball-container" class="absolute inset-0 z-20" style="transition: transform 5s cubic-bezier(0.2, 0.8, 0.3, 1);">
+                                <div class="w-4 h-4 bg-white rounded-full absolute top-[10px] left-1/2 -translate-x-1/2 shadow-[0_0_10px_white]"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="glass-panel p-4 overflow-x-auto max-w-full">
+                            <div class="flex">
+                                <div id="rc-0" onclick="window.rB(0)" class="roulette-cell r-grn flex flex-col items-center justify-center w-12 border border-white/20 rounded-l-xl relative">0</div>
+                                <div class="flex flex-col">
+                                    ${rLayout.map(row => `<div class="flex">${row.map(n => `<div id="rc-${n}" onclick="window.rB(${n})" class="roulette-cell w-10 md:w-14 relative ${redNums.includes(n)?'r-red':'r-blk'} border border-white/10">${n}</div>`).join('')}</div>`).join('')}
+                                </div>
+                            </div>
+                            <div class="flex ml-12 border-t border-white/10">
+                                <div onclick="window.rB('red')" id="rc-red" class="roulette-cell flex-1 r-red relative py-2">RED</div>
+                                <div onclick="window.rB('black')" id="rc-black" class="roulette-cell flex-1 r-blk relative py-2">BLACK</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-full max-w-xl flex gap-4">
+                        <input type="number" id="r-v" value="10" class="w-1/3 bg-black/50 border border-white/10 p-4 rounded-xl text-yellow-500 font-black text-center text-xl outline-none">
+                        <button onclick="window.rS()" id="r-btn" class="w-1/3 btn-gold py-4 uppercase text-lg">SPIN</button>
+                        <button onclick="window.rC()" class="w-1/3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-colors">CLEAR</button>
+                    </div>
+                </div>`;
+                
+                window.rB = (n) => { 
+                    if(sp) return; let v=parseFloat(document.getElementById('r-v').value); if(balance<v) return window.showToast("INSUFFICIENT FUNDS"); 
+                    window.updateBalance(-v); bets.set(n, (bets.get(n)||0)+v); 
+                    if(document.getElementById(`rc-${n}`)) {
+                        const el = document.getElementById(`rc-${n}`); el.classList.add('active-bet');
+                        if(!el.querySelector('.chip')) el.innerHTML += `<div class="chip absolute top-0 right-0 bg-yellow-500 text-black text-[9px] px-1 rounded-bl-lg font-black">${bets.get(n)}</div>`;
+                        else el.querySelector('.chip').innerText = bets.get(n);
+                    }
+                };
+                window.rC = () => { if(sp)return; bets.forEach((v) => window.updateBalance(v)); bets.clear(); launchRoulette(document.getElementById('game-view')); };
+                
+                let wheelRot = 0; let ballRot = 0;
+                window.rS = () => { 
+                    if(!bets.size || sp) return window.showToast("PLACE BETS"); 
+                    sp=true; const res = Math.floor(Math.random()*37); 
+                    document.getElementById('r-btn').disabled = true;
+                    document.getElementById('r-res').innerText="..."; 
+
+                    wheelRot += 1440; 
+                    const idx = order.indexOf(res);
+                    const sliceAngle = 360/37;
+                    const targetAngle = -(idx * sliceAngle); 
+                    ballRot = targetAngle - 2160; 
+
+                    document.getElementById('r-wheel').style.transform = `rotate(${wheelRot}deg)`;
+                    document.getElementById('r-ball-container').style.transform = `rotate(${ballRot}deg)`;
+
+                    setTimeout(()=>{ 
+                        document.getElementById('r-res').innerText=res; 
+                        
+                        let totalWin = 0;
+                        if(bets.has(res)) totalWin += bets.get(res)*36;
+                        if(redNums.includes(res) && bets.has('red')) totalWin += bets.get('red')*2;
+                        if(!redNums.includes(res) && res !== 0 && bets.has('black')) totalWin += bets.get('black')*2;
+
+                        if(totalWin > 0) { window.updateBalance(totalWin); window.showToast(`WON $${totalWin}!`); }
+                        else window.showToast("LOSS");
+
+                        bets.clear(); setTimeout(()=>launchRoulette(document.getElementById('game-view')), 3000); 
+                    }, 5000); 
+                };
+            }
+
+            // --- 6. CYBER CRASH ---
+            function launchCrash(c) {
+                let st={a:false, b:10, m:1.0, c:false, hist:[]};
+                const render = () => {
+                    c.innerHTML=`<div class="flex flex-col items-center gap-6 py-6 animate-in fade-in w-full max-w-3xl">
+                        <div class="flex gap-2 w-full overflow-hidden h-8">${st.hist.map(m=>`<div class="text-xs font-bold px-2 py-1 rounded bg-black border ${m>=2?'border-emerald-500/50 text-emerald-400':'border-red-500/50 text-red-400'}">${m.toFixed(2)}x</div>`).join('')}</div>
+                        <div class="w-full h-80 bg-black border border-white/5 rounded-[2rem] flex flex-col items-center justify-center relative overflow-hidden shadow-inner">
+                            <div class="absolute top-6 right-6 text-right">
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest">Volatility</div>
+                                <div id="c-prob" class="text-lg font-black text-rose-500 font-mono">50.0%</div>
+                            </div>
+                            <div id="c-m" class="orbitron text-7xl md:text-8xl font-black text-slate-700 z-10 transition-colors duration-300">1.00x</div>
+                            <canvas id="c-graph" class="absolute bottom-0 left-0 w-full h-full border-none shadow-none z-0" width="800" height="320"></canvas>
+                        </div>
+                        <div class="w-full max-w-md glass-panel p-6">
+                            <input type="number" id="c-b" value="${st.b}" class="w-full bg-black/50 border border-white/10 p-4 rounded-xl text-yellow-500 font-black text-center text-2xl outline-none mb-4">
+                            <div id="c-btn"><button onclick="window.cSt()" class="w-full btn-gold py-6 text-xl">IGNITE</button></div>
+                        </div>
+                    </div>`;
+                };
+                
+                window.cSt=()=>{ 
+                    st.b=parseFloat(document.getElementById('c-b').value); if(balance<st.b) return window.showToast("INSUFFICIENT FUNDS"); 
+                    window.updateBalance(-st.b); st.a=true; st.m=1.0; st.c=false;
+                    document.getElementById('c-btn').innerHTML=`<button onclick="window.cEj()" id="ce-btn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black py-6 rounded-xl uppercase transition-colors text-xl">Eject</button>`;
+                    
+                    const r = Math.random();
+                    const bust = r < 0.05 ? 1.00 : (1.00 / (1.00 - r)); 
+                    let t = 0;
+                    
+                    const can = document.getElementById('c-graph'); const ctx = can.getContext('2d');
+                    ctx.strokeStyle = 'rgba(234, 179, 8, 0.5)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(0, 320);
+
+                    let it=setInterval(()=>{ 
+                        t += 0.05;
+                        st.m = Math.pow(Math.E, 0.08 * t); 
+                        
+                        let prob = Math.min(99.9, Math.max(1, 50 + Math.sin(t*3)*20 + Math.random()*20));
+                        const probEl = document.getElementById('c-prob');
+                        if(probEl) probEl.innerText = prob.toFixed(1) + "%";
+
+                        const mEl=document.getElementById('c-m'); 
+                        if(mEl){mEl.innerText=st.m.toFixed(2)+'x'; mEl.style.color='#eab308';} 
+
+                        const x = Math.min(800, t * 20);
+                        const y = Math.max(0, 320 - (st.m * 10));
+                        ctx.lineTo(x, y); ctx.stroke();
+                        
+                        if(st.m>=bust){
+                            clearInterval(it); st.a=false; 
+                            if(mEl){mEl.innerText='CRASHED @ '+st.m.toFixed(2); mEl.style.color='#e11d48';} 
+                            if(!st.c) window.showToast("SYSTEM BUST"); 
+                            st.hist.unshift(st.m); if(st.hist.length>8) st.hist.pop();
+                            setTimeout(render, 3000); 
+                        } 
+                    }, 50);
+                    activeTimers.push(it); 
+                };
+                window.cEj=()=>{ if(st.c||!st.a) return; window.updateBalance(st.b*st.m); st.c=true; window.showToast(`CLAIMED $${(st.b*st.m).toFixed(2)}`); document.getElementById('ce-btn').disabled=true; document.getElementById('ce-btn').innerText='SUCCESS'; };
+                render();
+            }
+
+            // --- 7. BLACKJACK ---
+            function launchBlackjack(c) {
+                const gC=()=>({s:['♠','♥','♦','♣'][Math.floor(Math.random()*4)], v:['A','2','3','4','5','6','7','8','9','10','J','Q','K'][Math.floor(Math.random()*13)]}); 
+                const dV=(h)=>{let v=0,a=0;h.forEach(c=>{if(c.v==='A')a++;else if(['J','Q','K'].includes(c.v))v+=10;else v+=parseInt(c.v);});for(let i=0;i<a;i++)v+=(v+11<=21)?11:1;return v;};
+                
+                if(!window.bjShoe || window.bjShoe.length < 15) {
+                    window.bjShoe = [];
+                    ['♠','♥','♦','♣'].forEach(s=>['A','2','3','4','5','6','7','8','9','10','J','Q','K'].forEach(v=>window.bjShoe.push({v,s})));
+                    window.bjShoe.sort(()=>Math.random()-0.5);
+                }
+
+                let st={a:false, b:25, p:[], d:[]}; 
+                
+                c.innerHTML=`<div class="flex flex-col items-center gap-6 py-6 animate-in fade-in w-full max-w-4xl relative">
+                    <div id="bj-ov" class="absolute inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex-col items-center justify-center rounded-[3rem] border border-white/10">
+                        <h2 id="bj-ov-m" class="orbitron text-5xl font-black text-white mb-2 uppercase"></h2>
+                        <p id="bj-ov-a" class="text-xl text-yellow-500 font-bold mb-8"></p>
+                        <button onclick="window.bjNx()" class="btn-gold px-12 py-5 text-xl">NEXT HAND</button>
+                    </div>
+                    <div class="w-full glass-panel p-8 space-y-12">
+                        <div class="flex justify-between items-start w-full absolute top-6 left-0 px-10 pointer-events-none">
+                            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Single Deck</span>
+                            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest" id="shoe-count">Cards in Shoe: ${window.bjShoe.length}</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-2 mt-6">
+                            <div class="flex items-center gap-4"><div class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Dealer</div><div id="bj-d-val" class="bg-black border border-white/10 px-2 py-1 rounded text-white font-bold text-xs">--</div></div>
+                            <div id="bj-d" class="flex justify-center gap-3 h-32"></div>
+                        </div>
+                        <div class="flex flex-col items-center gap-2">
+                            <div id="bj-p" class="flex justify-center gap-3 h-32"></div>
+                            <div class="flex items-center gap-4"><div class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Player</div><div id="bj-p-val" class="bg-black border border-white/10 px-2 py-1 rounded text-white font-bold text-xs">--</div></div>
+                        </div>
+                    </div>
+                    <div class="w-full max-w-md glass-panel p-6" id="bj-ctrl">
+                        <input type="number" id="bj-b" value="25" class="w-full bg-black/50 border border-white/5 p-4 rounded-xl text-yellow-500 font-bold text-center text-xl outline-none mb-4">
+                        <button onclick="window.bjDeal()" class="w-full btn-gold py-5">DEAL CARDS</button>
+                    </div>
+                </div>`;
+                
+                const u=()=>{ 
+                    const cd=(c)=>`<div class="casino-card ${['♥','♦'].includes(c.s)?'red-card':''} animate-in zoom-in duration-300"><span>${c.v}</span><span class="text-4xl self-center">${c.s}</span><span class="self-end rotate-180">${c.v}</span></div>`; 
+                    document.getElementById('bj-p').innerHTML=st.p.map(cd).join(''); 
+                    document.getElementById('bj-d').innerHTML=st.d.map((c,i)=>(st.a&&i===1)?'<div class="casino-card bg-slate-800 border-2 border-slate-600"></div>':cd(c)).join(''); 
+                    document.getElementById('bj-p-val').innerText = dV(st.p);
+                    document.getElementById('bj-d-val').innerText = st.a ? dV([st.d[0]]) : dV(st.d);
+                    document.getElementById('shoe-count').innerText = `Cards in Shoe: ${window.bjShoe.length}`;
+                };
+                const f=(m,x, isNat=false)=>{ 
+                    const winAmt = st.b*x;
+                    if(x>0) window.updateBalance(winAmt);
+                    setTimeout(()=>{
+                        const ov = document.getElementById('bj-ov');
+                        ov.classList.remove('hidden'); ov.classList.add('flex');
+                        document.getElementById('bj-ov-m').innerText=m;
+                        if(x>1) {
+                            document.getElementById('bj-ov-m').style.color = '#10b981';
+                            document.getElementById('bj-ov-a').innerText = `+ $${winAmt.toFixed(2)} ${isNat?'(3:2)':''}`;
+                        } else if(x===1) {
+                            document.getElementById('bj-ov-m').style.color = '#f59e0b';
+                            document.getElementById('bj-ov-a').innerText = `PUSH (+$0)`;
+                        } else {
+                            document.getElementById('bj-ov-m').style.color = '#ef4444';
+                            document.getElementById('bj-ov-a').innerText = `- $${st.b.toFixed(2)}`;
+                        }
+                    }, 1000);
+                };
+                window.bjNx = () => launchBlackjack(document.getElementById('game-view'));
+                
+                window.bjDeal=()=>{ 
+                    let b=parseFloat(document.getElementById('bj-b').value); if(balance<b) return window.showToast("INSUFFICIENT FUNDS"); 
+                    window.updateBalance(-b); 
+                    if(window.bjShoe.length < 15) {
+                        window.showToast("SHUFFLING SHOE");
+                        window.bjShoe = []; ['♠','♥','♦','♣'].forEach(s=>['A','2','3','4','5','6','7','8','9','10','J','Q','K'].forEach(v=>window.bjShoe.push({v,s}))); window.bjShoe.sort(()=>Math.random()-0.5);
+                    }
+                    st={a:true, b:b, p:[window.bjShoe.pop(),window.bjShoe.pop()], d:[window.bjShoe.pop(),window.bjShoe.pop()]}; u(); 
+                    document.getElementById('bj-ctrl').innerHTML=`
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <button onclick="window.bjHit()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition-colors">HIT</button>
+                            <button onclick="window.bjSt()" class="btn-gold py-4">STAND</button>
+                        </div>
+                        <button onclick="window.bjDD()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl transition-colors">DOUBLE DOWN</button>
+                    `; 
+                    if(dV(st.p)===21) { st.a=false; u(); f("BLACKJACK", 2.5, true); document.getElementById('bj-ctrl').innerHTML=''; }
+                };
+                window.bjHit=()=>{ st.p.push(window.bjShoe.pop()); u(); if(dV(st.p)>21) { st.a=false; u(); f("BUST",0); document.getElementById('bj-ctrl').innerHTML=''; } };
+                window.bjDD=()=>{ 
+                    if(balance<st.b) return window.showToast("LOW FUNDS"); 
+                    window.updateBalance(-st.b); st.b*=2;
+                    st.p.push(window.bjShoe.pop()); u();
+                    if(dV(st.p)>21) { st.a=false; u(); f("BUST",0); document.getElementById('bj-ctrl').innerHTML=''; }
+                    else window.bjSt();
+                };
+                window.bjSt=async ()=>{ 
+                    st.a=false; u(); document.getElementById('bj-ctrl').innerHTML = ''; 
+                    while(dV(st.d)<17){st.d.push(window.bjShoe.pop()); u(); await new Promise(r=>setTimeout(r,600));} 
+                    let pv=dV(st.p),dv=dV(st.d); 
+                    if(dv>21||pv>dv) f("YOU WIN",2); else if(pv===dv) f("PUSH",1); else f("DEALER WINS",0); 
+                };
+            }
+
+            // --- 8. KENO ---
+            function launchKeno(c) {
+                let sel = [];
+                const kenoPay = (picks, hits) => {
+                    if(picks < 1) return 0;
+                    const table = {
+                        1: {1: 3}, 2: {1: 1, 2: 5}, 3: {2: 2, 3: 15}, 4: {2: 1, 3: 5, 4: 50},
+                        5: {3: 2, 4: 15, 5: 150}, 6: {3: 1, 4: 5, 5: 50, 6: 500},
+                        7: {3: 1, 4: 3, 5: 15, 6: 100, 7: 1000}, 8: {4: 2, 5: 10, 6: 50, 7: 500, 8: 2000},
+                        9: {4: 1, 5: 5, 6: 25, 7: 100, 8: 1000, 9: 3000}, 10: {4: 1, 5: 3, 6: 15, 7: 50, 8: 300, 9: 2000, 10: 5000}
+                    };
+                    return table[picks] && table[picks][hits] ? table[picks][hits] : 0;
+                };
+
+                c.innerHTML=`<div class="flex flex-col lg:flex-row gap-10 justify-center items-start animate-in fade-in"><div class="glass-panel p-6 grid grid-cols-10 gap-1.5 md:gap-2">${Array.from({length:80},(_,i)=>i+1).map(n=>`<button id="k-${n}" onclick="window.kTo(${n})" class="w-7 h-7 md:w-10 md:h-10 rounded bg-black border border-white/10 text-xs text-slate-500 hover:border-sky-500 transition-colors">${n}</button>`).join('')}</div><div class="w-full lg:w-80 glass-panel p-8 space-y-6"><h2 class="orbitron text-yellow-500 text-2xl font-black uppercase italic">Power Ball</h2><div class="flex justify-between font-black text-white text-lg border-b border-white/10 pb-4"><span>Picks</span><span id="k-c">0/10</span></div><div class="flex justify-between font-black text-sky-400 text-xl"><span>WAGER</span><span id="k-t">$0</span></div><button onclick="window.kP()" class="w-full btn-gold py-5 mt-4">DRAW 20</button></div></div>`;
+                
+                window.kTo=(n)=>{ const i=sel.indexOf(n); const b=document.getElementById(`k-${n}`); if(i>-1){sel.splice(i,1);b.style.background='black';b.style.color='#64748b';b.style.borderColor='rgba(255,255,255,0.1)';}else if(sel.length<10){sel.push(n);b.style.background='#0ea5e9';b.style.color='black';b.style.borderColor='#0ea5e9';} document.getElementById('k-t').innerText='$'+(sel.length*5); document.getElementById('k-c').innerText=`${sel.length}/10`; };
+                window.kP=async ()=>{ 
+                    const b=sel.length*5; if(b===0 || balance<b) return window.showToast("SELECT NODES"); 
+                    window.updateBalance(-b); 
+                    const r=Array.from({length:20},()=>Math.floor(Math.random()*80)+1); 
+                    for(let n of r){
+                        const btn=document.getElementById(`k-${n}`);
+                        if(btn){btn.style.background=sel.includes(n)?'#eab308':'white';btn.style.color='black';} 
+                        await new Promise(v=>setTimeout(v,60)); 
+                    } 
+                    const hits=sel.filter(n=>r.includes(n)).length; 
+                    const mult = kenoPay(sel.length, hits);
+                    const w = 5 * mult; 
+                    window.updateBalance(w); 
+                    window.showToast(`HITS: ${hits} | WON $${w}`); 
+                    setTimeout(()=>launchKeno(document.getElementById('game-view')), 4000); 
+                };
+            }
+
+        })();
+    </script>
+</body>
+</html>

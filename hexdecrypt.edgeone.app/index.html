@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Hex Decrypt — Cyberpunk breach protocol. Navigate the hex matrix to extract corporate data codes before the trace completes.">
+    <title>ICE // Breach Protocol</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔓</text></svg>">
+    <script src="../cdn.tailwindcss.com/index.html"></script>
+    <link href="../fonts.googleapis.com/css2@family=Orbitron%253Awght@400%3B700%3B900&amp;family=JetBrains+Mono%253Awght@400%3B700%3B800&amp;display=swap.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050905;
+            --term-green: #10b981;
+            --term-green-dim: rgba(16, 185, 129, 0.2);
+            --term-amber: #f59e0b;
+            --term-red: #ef4444;
+            --grid-bg: #0a0f0a;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #d1d5db;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Brutalist Corporate Styling */
+        .panel {
+            background: var(--grid-bg);
+            border: 1px solid #1f2937;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+            position: relative;
+            width: 100%;
+        }
+        
+        .panel::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid var(--term-green); border-left: 2px solid var(--term-green);
+        }
+
+        /* The Grid */
+        #hex-grid {
+            display: grid;
+            gap: clamp(2px, 1vw, 4px);
+            background: #000;
+            padding: clamp(2px, 1vw, 4px);
+            border: 1px solid #1f2937;
+            width: 100%;
+        }
+
+        .hex-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(0.85rem, 3.5vw, 1.25rem);
+            font-weight: 800;
+            color: var(--term-green);
+            background: #0f1715;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        /* Interaction Logic */
+        .hex-cell.dimmed {
+            color: #374151;
+            background: #050505;
+            pointer-events: none;
+        }
+
+        .hex-cell.active-axis {
+            background: var(--term-green-dim);
+            border: 1px solid var(--term-green);
+            color: #fff;
+            text-shadow: 0 0 5px var(--term-green);
+            animation: pulse-border 2s infinite;
+        }
+
+        .hex-cell.active-axis:hover, .hex-cell.active-axis:active {
+            background: var(--term-green);
+            color: #000;
+            transform: scale(1.05);
+            z-index: 10;
+        }
+
+        .hex-cell.clicked {
+            background: #000;
+            color: #1f2937;
+            border-color: #1f2937;
+            pointer-events: none;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(16, 185, 129, 0.3); }
+            50% { border-color: rgba(16, 185, 129, 1); }
+        }
+
+        /* Target Rows */
+        .target-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+            padding: 6px;
+            border: 1px solid #1f2937;
+            background: #0a0f0a;
+            transition: all 0.3s;
+        }
+
+        .target-row.solved {
+            border-color: var(--term-green);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .target-row.solved .t-hex {
+            color: var(--term-green);
+            text-shadow: 0 0 5px var(--term-green);
+        }
+
+        .t-hex {
+            font-size: clamp(0.6rem, 2.5vw, 0.85rem);
+            font-weight: bold;
+            color: #6b7280;
+            padding: 2px 4px;
+            background: #000;
+            border-radius: 2px;
+        }
+
+        /* Buffer */
+        .buffer-slot {
+            width: clamp(28px, 8vw, 36px); 
+            height: clamp(28px, 8vw, 36px);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid #1f2937;
+            font-size: clamp(0.7rem, 3vw, 0.9rem);
+            font-weight: bold;
+            background: #000;
+        }
+        
+        .buffer-slot.filled {
+            color: var(--term-amber);
+            border-color: var(--term-amber);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        /* Scanline Overlay */
+        .crt-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+        }
+
+        .trace-bar {
+            height: 4px;
+            background: var(--term-red);
+            width: 0%;
+            transition: width 1s linear;
+            box-shadow: 0 0 10px var(--term-red);
+        }
+        
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(2, 6, 23, 0.9); backdrop-filter: blur(8px);
+            z-index: 100; display: flex; align-items: center; justify-content: center;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <div class="crt-overlay"></div>
+
+    <!-- Top Bar -->
+    <header class="w-full bg-[#0a0f0a] border-b border-green-900/30 p-3 sm:p-4 flex justify-between items-center z-10">
+        <div class="flex items-center gap-4">
+            <a href="../index.html" class="orbitron text-[9px] text-slate-500 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-colors tracking-widest hidden sm:block">← HUB</a>
+            <div>
+                <h1 class="orbitron text-lg sm:text-2xl font-black text-emerald-500 tracking-widest">ICE_BREACH</h1>
+                <div class="text-[8px] sm:text-[10px] text-emerald-700 tracking-[0.3em]">v2.4.2 // CORPORATE SUBNET</div>
+            </div>
+        </div>
+        <div class="text-right flex flex-col items-end">
+            <div class="flex items-end gap-2 mt-1">
+                <div class="text-[8px] sm:text-[10px] uppercase text-slate-500 tracking-widest mb-0.5">Clearance</div>
+                <div id="level-display" class="text-xl sm:text-2xl font-black text-white orbitron leading-none">01</div>
+            </div>
+        </div>
+    </header>
+
+    <div id="trace-container" class="w-full bg-red-950/20 h-1 z-10 hidden">
+        <div id="trace-bar" class="trace-bar"></div>
+    </div>
+
+    <!-- Main Interface -->
+    <main class="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-8 p-3 sm:p-6 max-w-6xl mx-auto w-full z-10">
+        
+        <!-- Left: Daemons (Targets) & Buffer -->
+        <div class="w-full lg:w-1/2 space-y-4 lg:space-y-6 flex flex-col justify-center">
+            
+            <div class="panel p-4 sm:p-6">
+                <div class="flex justify-between items-end mb-3 border-b border-slate-800 pb-2">
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">Active Daemons</h2>
+                    <span id="timer-display" class="text-[10px] sm:text-xs font-mono text-red-500 animate-pulse hidden">TRACE: 30.0s</span>
+                </div>
+                
+                <div id="daemons-list" class="space-y-2">
+                    <!-- Daemons injected here -->
+                </div>
+                <p class="text-[8px] sm:text-[9px] text-slate-600 mt-3 uppercase tracking-widest leading-relaxed">Solve multiple daemons via overlapping buffers for max clearance. Any solved daemon is a success.</p>
+            </div>
+
+            <div class="panel p-4 sm:p-6">
+                <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex justify-between">
+                    <span>Rolling Upload Buffer</span>
+                    <span id="buffer-status" class="text-amber-500">0 / 8</span>
+                </div>
+                <div id="buffer-ui" class="flex flex-wrap gap-1 sm:gap-2">
+                    <!-- Buffer injected here -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right: Hex Matrix -->
+        <div class="w-full lg:w-1/2 flex flex-col items-center justify-center mt-2 lg:mt-0">
+            <div class="panel p-3 sm:p-6 w-full max-w-[450px]">
+                <div class="flex justify-center mb-3 sm:mb-4">
+                    <div class="text-[9px] sm:text-[10px] text-emerald-500 uppercase tracking-[0.2em] font-bold bg-emerald-500/10 px-3 py-1.5 rounded" id="axis-indicator">
+                        [ REQ: SELECT ROW 0 ]
+                    </div>
+                </div>
+                <div id="hex-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <!-- Grid injected here -->
+                </div>
+            </div>
+            
+            <button onclick="window.manualDisconnect()" class="mt-6 sm:mt-8 text-[9px] sm:text-[10px] text-slate-400 hover:text-amber-500 uppercase tracking-[0.5em] transition-colors font-bold p-2 border border-slate-800 rounded hover:border-amber-500/50 hover:bg-amber-500/10">
+                Execute & Disconnect
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="intro-modal" class="modal-overlay">
+        <div class="panel p-6 sm:p-8 max-w-md w-full border-t-4 border-t-emerald-500 mx-4 shadow-2xl shadow-emerald-900/20">
+            <h2 class="orbitron text-xl sm:text-2xl font-black text-emerald-500 mb-2">BREACH PROTOCOL</h2>
+            <div class="text-xs sm:text-sm text-slate-400 space-y-4 mb-6 sm:mb-8">
+                <p>Infiltrate the corporate ICE by uploading Daemons into your buffer.</p>
+                <ul class="list-disc pl-4 space-y-2">
+                    <li>Start by selecting a hex from the top row.</li>
+                    <li>Your next move is locked to the <b>Column</b> of that hex, then the <b>Row</b>, alternating endlessly.</li>
+                    <li>Your buffer is <b>rolling</b>. If it fills up, your oldest entry is pushed out to make room.</li>
+                    <li>Uploading <i>at least one</i> Daemon is considered a successful breach. Securing all 3 grants max clearance.</li>
+                </ul>
+            </div>
+            <!-- SAFE ONCLICK BINDING -->
+            <button onclick="window.initHexNode()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-black font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base">INITIALIZE HACK</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal-overlay hidden">
+        <div class="panel p-6 sm:p-8 max-w-md w-full text-center border-t-4 mx-4 shadow-2xl" id="result-box">
+            <h2 id="result-title" class="orbitron text-2xl sm:text-3xl font-black mb-2"></h2>
+            <p id="result-sub" class="text-xs sm:text-sm mb-6 uppercase tracking-widest text-slate-400"></p>
+            <div id="result-stats" class="text-[10px] sm:text-xs text-slate-400 space-y-2 mb-6 sm:mb-8 bg-black p-4 text-left border border-slate-800 rounded"></div>
+            <!-- SAFE ONCLICK BINDING -->
+            <button id="result-btn" onclick="window.initHexNode()" class="w-full font-black py-4 rounded uppercase tracking-widest transition-colors text-sm sm:text-base"></button>
+        </div>
+    </div>
+
+    <script>
+        // IIFE Container to protect logic and bypass strict mode restrictions
+        (function() {
+            const HEX_POOL = ['1C', 'BD', 'E9', '55', 'FF', '7A', '5C'];
+            
+            let state = {
+                level: 1,
+                gridSize: 5,
+                grid: [],
+                bufferSize: 7,
+                buffer: [],
+                targets: [],
+                axis: 'row',
+                index: 0,
+                status: 'idle',
+                timeLeft: 0,
+                maxTime: 0,
+                timerId: null
+            };
+
+            // Bind to Window explicitly to avoid mobile console naming collisions
+            window.abortHexNode = () => {
+                state.level = 1;
+                document.getElementById('result-modal').classList.add('hidden');
+                document.getElementById('intro-modal').classList.remove('hidden');
+                clearInterval(state.timerId);
+                document.getElementById('trace-container').classList.add('hidden');
+            };
+
+            window.initHexNode = () => {
+                document.getElementById('intro-modal').classList.add('hidden');
+                document.getElementById('result-modal').classList.add('hidden');
+                generatePuzzle();
+            };
+
+            window.hexDisconnect = () => {
+                if(state.status === 'playing') {
+                    endGame(false, false, true);
+                } else {
+                    window.abortHexNode();
+                }
+            };
+
+            window.handleHexClick = (r, c) => {
+                if(state.status !== 'playing') return;
+                
+                state.grid[r][c].clicked = true;
+                state.buffer.push(state.grid[r][c].val);
+                
+                // Rolling Buffer logic
+                if(state.buffer.length > state.bufferSize) {
+                    state.buffer.shift();
+                }
+                
+                state.axis = state.axis === 'row' ? 'col' : 'row';
+                state.index = state.axis === 'row' ? r : c;
+
+                checkLogic();
+                renderUI();
+            };
+
+            function generatePuzzle() {
+                // Difficulty Scaling
+                state.gridSize = state.level >= 5 ? 6 : 5;
+                state.bufferSize = state.level >= 3 ? 8 : 7;
+                state.maxTime = Math.max(20, 45 - (state.level * 2)); 
+                state.timeLeft = state.maxTime;
+
+                // 1. Build Grid
+                state.grid = [];
+                for(let r=0; r<state.gridSize; r++){
+                    let row = [];
+                    for(let c=0; c<state.gridSize; c++){
+                        row.push({ val: HEX_POOL[Math.floor(Math.random() * HEX_POOL.length)], clicked: false });
+                    }
+                    state.grid.push(row);
+                }
+
+                // 2. Generate a "Master Path"
+                let masterPath = [];
+                let simGrid = JSON.parse(JSON.stringify(state.grid));
+                let simAxis = 'row';
+                let simIndex = 0;
+                
+                for(let i=0; i<state.bufferSize; i++) {
+                    let valid = [];
+                    if(simAxis === 'row') {
+                        for(let c=0; c<state.gridSize; c++) if(!simGrid[simIndex][c].clicked) valid.push(c);
+                        if(valid.length === 0) break;
+                        let choice = valid[Math.floor(Math.random()*valid.length)];
+                        masterPath.push(simGrid[simIndex][choice].val);
+                        simGrid[simIndex][choice].clicked = true;
+                        simAxis = 'col'; simIndex = choice;
+                    } else {
+                        for(let r=0; r<state.gridSize; r++) if(!simGrid[r][simIndex].clicked) valid.push(r);
+                        if(valid.length === 0) break;
+                        let choice = valid[Math.floor(Math.random()*valid.length)];
+                        masterPath.push(simGrid[choice][simIndex].val);
+                        simGrid[choice][simIndex].clicked = true;
+                        simAxis = 'row'; simIndex = choice;
+                    }
+                }
+
+                // 3. Extract 3 Daemons from the master path
+                state.targets = [];
+                const daemonNames = ['DATAMINE_V1', 'ICE_PICK', 'ROOT_ACCESS'];
+                
+                // Sub-segment 1
+                let len1 = Math.min(masterPath.length, Math.floor(Math.random()*2)+2);
+                state.targets.push({ id: 0, name: daemonNames[0], seq: masterPath.slice(0, len1), solved: false });
+                
+                // Sub-segment 2
+                if(masterPath.length >= 4) {
+                    let s2 = Math.floor(Math.random() * (masterPath.length - 3));
+                    state.targets.push({ id: 1, name: daemonNames[1], seq: masterPath.slice(s2, s2+3), solved: false });
+                }
+
+                // Sub-segment 3
+                if(masterPath.length >= 6) {
+                    let len3 = Math.floor(Math.random()*2)+3;
+                    let s3 = masterPath.length - len3;
+                    state.targets.push({ id: 2, name: daemonNames[2], seq: masterPath.slice(s3, s3+len3), solved: false });
+                }
+
+                state.targets.sort(() => Math.random() - 0.5);
+
+                // Reset Game State
+                state.buffer = [];
+                state.axis = 'row';
+                state.index = 0;
+                state.status = 'playing';
+
+                document.getElementById('level-display').innerText = state.level.toString().padStart(2, '0');
+                
+                document.getElementById('trace-container').classList.remove('hidden');
+                document.getElementById('timer-display').classList.remove('hidden');
+                document.getElementById('trace-bar').style.width = '0%';
+                
+                renderUI();
+                startTimer();
+            }
+
+            function startTimer() {
+                clearInterval(state.timerId);
+                state.timerId = setInterval(() => {
+                    if(state.status !== 'playing') {
+                        clearInterval(state.timerId);
+                        return;
+                    }
+                    state.timeLeft -= 0.1;
+                    
+                    const percent = ((state.maxTime - state.timeLeft) / state.maxTime) * 100;
+                    document.getElementById('trace-bar').style.width = `${percent}%`;
+                    document.getElementById('timer-display').innerText = `TRACE: ${Math.max(0, state.timeLeft).toFixed(1)}s`;
+
+                    if(state.timeLeft <= 0) {
+                        clearInterval(state.timerId);
+                        endGame(true, false, false);
+                    }
+                }, 100);
+            }
+
+            function renderUI() {
+                const bc = document.getElementById('buffer-ui');
+                let bHTML = '';
+                for(let i=0; i<state.bufferSize; i++) {
+                    if(i < state.buffer.length) bHTML += `<div class="buffer-slot filled">${state.buffer[i]}</div>`;
+                    else bHTML += `<div class="buffer-slot text-slate-800 border-slate-800"></div>`;
+                }
+                bc.innerHTML = bHTML;
+                document.getElementById('buffer-status').innerText = `${state.buffer.length} / ${state.bufferSize}`;
+
+                const dc = document.getElementById('daemons-list');
+                dc.innerHTML = state.targets.map(t => `
+                    <div class="target-row ${t.solved ? 'solved' : ''}">
+                        <div class="text-[9px] sm:text-[10px] w-20 sm:w-24 text-slate-500 uppercase tracking-wider truncate">${t.name}</div>
+                        <div class="flex gap-1">${t.seq.map(h => `<div class="t-hex">${h}</div>`).join('')}</div>
+                    </div>
+                `).join('');
+
+                const ind = document.getElementById('axis-indicator');
+                ind.innerText = `[ REQ: SELECT ${state.axis.toUpperCase()} ${state.index} ]`;
+
+                const gc = document.getElementById('hex-grid');
+                gc.style.gridTemplateColumns = `repeat(${state.gridSize}, 1fr)`;
+                gc.innerHTML = '';
+                
+                for(let r=0; r<state.gridSize; r++){
+                    for(let c=0; c<state.gridSize; c++){
+                        const cell = state.grid[r][c];
+                        const div = document.createElement('div');
+                        div.className = 'hex-cell';
+                        div.innerText = cell.val;
+                        
+                        if(cell.clicked) {
+                            div.classList.add('clicked');
+                            div.innerText = '[ ]';
+                        } else if (state.status === 'playing') {
+                            const isActive = (state.axis === 'row' && r === state.index) || (state.axis === 'col' && c === state.index);
+                            if(isActive) {
+                                div.classList.add('active-axis');
+                                // Safe JS event binding
+                                div.onclick = () => window.handleHexClick(r, c);
+                            } else {
+                                div.classList.add('dimmed');
+                            }
+                        }
+                        gc.appendChild(div);
+                    }
+                }
+            }
+
+            function checkLogic() {
+                const bStr = state.buffer.join(',');
+                let allSolved = true;
+                
+                state.targets.forEach(t => {
+                    if(!t.solved && bStr.includes(t.seq.join(','))) {
+                        t.solved = true;
+                    }
+                    if(!t.solved) allSolved = false;
+                });
+
+                if(allSolved) {
+                    endGame(false, false, false);
+                    return;
+                }
+
+                let hasMove = false;
+                if(state.axis === 'row') {
+                    for(let c=0; c<state.gridSize; c++) if(!state.grid[state.index][c].clicked) hasMove = true;
+                } else {
+                    for(let r=0; r<state.gridSize; r++) if(!state.grid[r][state.index].clicked) hasMove = true;
+                }
+
+                if(!hasMove) {
+                    endGame(false, true, false);
+                }
+            }
+
+            function endGame(isTimeout, isDeadEnd, isManual) {
+                state.status = 'over';
+                clearInterval(state.timerId);
+                
+                const solvedCount = state.targets.filter(t => t.solved).length;
+                const total = state.targets.length;
+                const isWin = solvedCount > 0;
+
+                setTimeout(() => {
+                    const mod = document.getElementById('result-modal');
+                    const box = document.getElementById('result-box');
+                    const title = document.getElementById('result-title');
+                    const sub = document.getElementById('result-sub');
+                    const stats = document.getElementById('result-stats');
+                    const btn = document.getElementById('result-btn');
+
+                    mod.classList.remove('hidden');
+
+                    if(isWin) {
+                        box.style.borderColor = '#10b981';
+                        box.style.boxShadow = '0 0 50px rgba(16, 185, 129, 0.2)';
+                        title.innerText = solvedCount === total ? "SYSTEM OVERRIDE" : "PARTIAL BREACH";
+                        title.style.color = '#10b981';
+                        
+                        if(isManual) sub.innerText = `Manual Disconnect. Daemons: ${solvedCount} / ${total}`;
+                        else if(isTimeout) sub.innerText = `Trace Caught You. Daemons: ${solvedCount} / ${total}`;
+                        else if(isDeadEnd) sub.innerText = `Dead End Reached. Daemons: ${solvedCount} / ${total}`;
+                        else sub.innerText = `All Daemons Uploaded.`;
+
+                        let statHTML = `<div class="text-emerald-500 mb-2">> NODE LVL ${state.level} COMPROMISED</div>`;
+                        state.targets.forEach(t => {
+                            statHTML += `<div>[${t.solved ? 'OK' : 'FAIL'}] ${t.name}</div>`;
+                        });
+                        stats.innerHTML = statHTML;
+
+                        btn.innerText = "PROCEED TO NEXT NODE";
+                        btn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-black font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                        
+                        btn.onclick = window.initHexNode;
+                        
+                        state.level++;
+                    } else {
+                        box.style.borderColor = '#ef4444';
+                        box.style.boxShadow = '0 0 50px rgba(239, 68, 68, 0.2)';
+                        title.innerText = isTimeout ? "TRACE COMPLETE" : (isManual ? "ABORTED" : "ACCESS DENIED");
+                        title.style.color = '#ef4444';
+                        
+                        if(isManual) sub.innerText = "Connection severed before upload.";
+                        else if(isTimeout) sub.innerText = "System Security caught you.";
+                        else sub.innerText = "No routes left. 0 Daemons uploaded.";
+                        
+                        stats.innerHTML = `<div class="text-red-500">> CONNECTION SEVERED</div><div>Clearance reverted to Level 01.</div>`;
+
+                        btn.innerText = "REBOOT CONNECTION";
+                        btn.className = "w-full bg-red-900 hover:bg-red-800 text-white font-black py-4 rounded uppercase tracking-widest transition-colors mt-4";
+                        
+                        btn.onclick = window.initHexNode;
+                        
+                        state.level = 1;
+                    }
+                }, 600);
+            }
+
+        })();
+    </script>
+</body>
+</html>
